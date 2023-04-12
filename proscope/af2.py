@@ -9,20 +9,24 @@ from tqdm import tqdm
 import gzip
 import pandas as pd
 #%%
-seq = {}
-with gzip.open("./uniprot_sprot.fasta.gz", 'rt') as f:
-    for record in tqdm(SeqIO.parse(f, "fasta")):
-        id = record.id.split('|')[1]
-        seq[id] = record.seq
+# check if seq is in globals()
+if 'seq' not in globals():
+    seq = {}
+    with gzip.open("../data/uniprot_sprot.fasta.gz", 'rt') as f:
+        for record in tqdm(SeqIO.parse(f, "fasta")):
+            id = record.id.split('|')[1]
+            seq[id] = record.seq
 
-genename_to_uniprot = pd.read_csv(
-        "uniprot_to_genename.txt", sep='\t').set_index('To').to_dict()['From']
-        
-lddt = dict()
-with open("plddt/9606.pLDDT.tdt", 'r') as f:
-    for line in f:
-        id, score = line.strip().split('\t')
-        lddt[id] = np.array(score.split(",")).astype(float)
+if 'genename_to_uniprot' not in globals():
+    genename_to_uniprot = pd.read_csv(
+            "../data/uniprot_to_genename.txt", sep='\t').set_index('To').to_dict()['From']
+
+if 'lddt' not in globals():
+    lddt = dict()
+    with open("../data/9606.pLDDT.tdt", 'r') as f:
+        for line in f:
+            id, score = line.strip().split('\t')
+            lddt[id] = np.array(score.split(",")).astype(float)
 
 def parse_atm_record(line):
     '''Get the atm record

@@ -1,0 +1,12 @@
+README.md
+setup.py
+proscope/__init__.py
+proscope/af2.py
+proscope/es.py
+proscope/esm.py
+proscope/md.py
+proscope/protein.py
+proscope.egg-info/PKG-INFO
+proscope.egg-info/SOURCES.txt
+proscope.egg-info/dependency_links.txt
+proscope.egg-info/top_level.txt

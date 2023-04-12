@@ -8,23 +8,29 @@ import gzip
 from matplotlib import pyplot as plt
 import pandas as pd
 import xmlschema
-from af2 import AFResult
+from proscope.af2 import AFResult
 #%%
 schema = xmlschema.XMLSchema('https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot.xsd')
-seq = {}
-with gzip.open("data/uniprot_sprot.fasta.gz", 'rt') as f:
-    for record in tqdm(SeqIO.parse(f, "fasta")):
-        id = record.id.split('|')[1]
-        seq[id] = record.seq
+#%%
+# check if seq is in globals() # TODO somehow it's still loading twice. need to figure out a way to fast loading it
+if 'seq' not in globals():
+    seq = {}
+    with gzip.open("../data/uniprot_sprot.fasta.gz", 'rt') as f:
+        for record in tqdm(SeqIO.parse(f, "fasta")):
+            id = record.id.split('|')[1]
+            seq[id] = record.seq
 
-genename_to_uniprot = pd.read_csv(
-        "data/uniprot_to_genename.txt", sep='\t').set_index('To').to_dict()['From']
-        
-lddt = dict()
-with open("data/9606.pLDDT.tdt", 'r') as f:
-    for line in f:
-        id, score = line.strip().split('\t')
-        lddt[id] = np.array(score.split(",")).astype(float)
+if 'genename_to_uniprot' not in globals():
+    genename_to_uniprot = pd.read_csv(
+            "../data/uniprot_to_genename.txt", sep='\t').set_index('To').to_dict()['From']
+
+if 'lddt' not in globals():
+    lddt = dict()
+    with open("../data/9606.pLDDT.tdt", 'r') as f:
+        for line in f:
+            id, score = line.strip().split('\t')
+            lddt[id] = np.array(score.split(",")).astype(float)
+
 #%%
 class Protein(object):
     """Protein class"""
@@ -82,7 +88,7 @@ class Protein(object):
         return result/np.max(result)
 
 
-    def plot_plddt(self, to_compare=None):
+    def plot_plddt(self, to_compare=None, filename=None):
         plt.figure(figsize=(20, 5))
         plt.plot(self.plddt)
         if to_compare is not None:
@@ -115,8 +121,10 @@ class Protein(object):
         plt.title(f"{self.gene_name} pLDDT")
         plt.xlabel("Residue")
         plt.ylabel("pLDDT")
-
+        if filename is not None:
+            plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.show()
+
 
     @property
     def low_plddt_region(self, threshold=0.6):
