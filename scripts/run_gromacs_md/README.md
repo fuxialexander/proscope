@@ -1,0 +1,3 @@
+# GROMACS MD simulation using a99SB-disp force field
+
+# TODO: add description and hopefully add a dockerfile for GROMACS-gpu ...
