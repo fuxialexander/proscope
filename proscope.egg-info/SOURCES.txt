@@ -1,5 +1,7 @@
+MANIFEST.in
 README.md
 setup.py
+data/myc_protein_plot.png
 proscope/__init__.py
 proscope/af2.py
 proscope/es.py

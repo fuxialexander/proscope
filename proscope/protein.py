@@ -7,6 +7,7 @@ from tqdm import tqdm
 import gzip
 from matplotlib import pyplot as plt
 import pandas as pd
+import os
 import xmlschema
 from proscope.af2 import AFResult
 #%%
@@ -15,18 +16,18 @@ schema = xmlschema.XMLSchema('https://ftp.uniprot.org/pub/databases/uniprot/curr
 # check if seq is in globals() # TODO somehow it's still loading twice. need to figure out a way to fast loading it
 if 'seq' not in globals():
     seq = {}
-    with gzip.open("../data/uniprot_sprot.fasta.gz", 'rt') as f:
+    with gzip.open(f'{os.path.dirname(__file__)}/uniprot_sprot.fasta.gz', 'rt') as f:
         for record in tqdm(SeqIO.parse(f, "fasta")):
             id = record.id.split('|')[1]
             seq[id] = record.seq
 
 if 'genename_to_uniprot' not in globals():
-    genename_to_uniprot = pd.read_csv(
-            "../data/uniprot_to_genename.txt", sep='\t').set_index('To').to_dict()['From']
+    # load using __file__ relative path
+    genename_to_uniprot = pd.read_csv(f'{os.path.dirname(__file__)}/uniprot_to_genename.txt', sep='\t').set_index('To').to_dict()['From']
 
 if 'lddt' not in globals():
     lddt = dict()
-    with open("../data/9606.pLDDT.tdt", 'r') as f:
+    with open(f'{os.path.dirname(__file__)}/9606.pLDDT.tdt', 'r') as f:
         for line in f:
             id, score = line.strip().split('\t')
             lddt[id] = np.array(score.split(",")).astype(float)
