@@ -114,6 +114,8 @@ class Protein(object):
         legend_elements = []
         for i in self.domains.feature_type.unique():
             legend_elements.append(Patch(facecolor=feature_type_to_color[i], label=i))
+            #reverse the order of legend
+        legend_elements = legend_elements[::-1]
         # add number index of low or high plddt region on top of the plot
         for i, region in enumerate(self.low_or_high_plddt_region):
             plt.text(region[0], 0.9, f"{i}", fontsize=12)
