@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import os
 import xmlschema
-from proscope.af2 import AFResult
+# from proscope.af2 import AFResult
 #%%
 schema = xmlschema.XMLSchema('https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot.xsd')
 #%%
@@ -43,11 +43,6 @@ class Protein(object):
         self.uniprot_id = genename_to_uniprot[gene_name]
         self.plddt = lddt[self.uniprot_id]
         self.length = len(self.plddt)
-        # TODO: generalize the AFResult handling to all protein
-        # if homodimer:
-        #     dir = f"dimer_output/{gene_name}"
-        #     result = AFResult(dir, gene_name)
-        #     self.plddt = (result.plddt[0: self.length] + result.plddt[self.length: 2*self.length])/2
         self.sequence = seq[self.uniprot_id]
         self.smoothed_plddt = self.get_smooth_plddt()
         self.domains = self.get_domain_from_uniprot()
@@ -132,7 +127,7 @@ class Protein(object):
     @property
     def low_plddt_region(self, threshold=0.6):
         idx = np.where(self.smoothed_plddt < threshold)[0]
-        # get regions from idx, join two regions if they are close (<10bp apart) 
+        # get regions from idx, join two regions if they are close (<30aa apart) 
         regions = []
         for i in idx:
             if len(regions) == 0:
@@ -149,7 +144,7 @@ class Protein(object):
         return regions
 
     @property
-    def low_plddt_region_sequence(self, threshold=0.7):
+    def low_plddt_region_sequence(self, threshold=0.6):
         regions = self.low_plddt_region
         sequences = []
         for i, region in enumerate(regions):
@@ -157,7 +152,7 @@ class Protein(object):
             sequences.append(s)
         return sequences
     @property
-    def low_or_high_plddt_region(self, threshold=0.7):
+    def low_or_high_plddt_region(self, threshold=0.6):
         """Get regions with low plddt and high plddt, define breakpoint by merge regions if they are close (<30bp apart)
         Note: if the last region is close to the end, merge it with the second last region
         If the second last region has already been removed, ignore it"""
@@ -189,7 +184,7 @@ class Protein(object):
         return regions
 
     @property
-    def low_or_high_plddt_region_sequence(self, threshold=0.7):
+    def low_or_high_plddt_region_sequence(self, threshold=0.6):
         # get regions list from low_plddt_region, keep also high plddt regions
         sequences = []
         for i, region in enumerate(self.low_or_high_plddt_region):

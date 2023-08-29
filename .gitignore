@@ -1,1 +1,9 @@
 proscope/__pycache__/
+test/causal*
+test/test_causal_db
+causal_pairs
+test/__pycache__
+data/causal_edges_db.tar.gz
+data/causal_ep300_db.tar.gz
+data/causal_top_pair_per_celltype_df_non_redundant_pair_with_count.csv
+proscope/9606.pLDDT.pickle

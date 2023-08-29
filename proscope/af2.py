@@ -6,8 +6,11 @@ from glob import glob
 from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
+import seaborn as sns
+import matplotlib.pyplot as plt
 import gzip
 import pandas as pd
+from proscope.protein import Protein
 #%%
 # check if seq is in globals()
 if 'seq' not in globals():
@@ -22,12 +25,21 @@ if 'genename_to_uniprot' not in globals():
             f'{os.path.dirname(__file__)}/uniprot_to_genename.txt', sep='\t').set_index('To').to_dict()['From']
 
 if 'lddt' not in globals():
-    lddt = dict()
-    with open(f'{os.path.dirname(__file__)}/9606.pLDDT.tdt', 'r') as f:
-        for line in f:
-            id, score = line.strip().split('\t')
-            lddt[id] = np.array(score.split(",")).astype(float)
-
+    if not os.path.exists(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle'):
+        lddt = dict()
+        with open(f'{os.path.dirname(__file__)}/9606.pLDDT.tdt', 'r') as f:
+            for line in f:
+                id, score = line.strip().split('\t')
+                lddt[id] = np.array(score.split(",")).astype(float)
+        # save lddt to a pickle file
+        import pickle
+        with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'wb') as f:
+            pickle.dump(lddt, f)
+    else:
+        import pickle
+        with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'rb') as f:
+            lddt = pickle.load(f)
+#%%
 def parse_atm_record(line):
     '''Get the atm record
     '''
@@ -163,16 +175,16 @@ class AFScore(object):
         return np.min(interchain_pae)
 #%%
 class AFResult(object):
-    """AlphaFold result"""
-    def __init__(self, result_dir, name, fasta_dir=None) -> None:
+    """AlphaFold result from a files"""
+    def __init__(self, result_dir, fasta_path) -> None:
         self.dir = result_dir
-        if fasta_dir is None:
-            self.fasta_dir = result_dir
-        else:
-            self.fasta_dir = fasta_dir
-        self.name = name
+        self.fasta_path = fasta_path
+        self.fasta = self._parse_fasta()
+
+        self.name = self.fasta.id
         self.config = self._parse_config()
-        # self.pae = self._parse_pae()
+        self.pae = self._parse_pae()
+        self.pdb = ""
         self.pdbs = os.path.join(self.dir, self.name + '_unrelaxed_rank_*_{model_type}_model_*.pdb'.format(model_type=self.config['model_type']))
         pdockq_max = 0
         ppv_max = 0
@@ -186,7 +198,7 @@ class AFResult(object):
                 self.pdb = f
         # get chain length from self.pdb
         chain_coords, chain_plddt = read_pdb(self.pdb)
-        self.chain_len = [len(c) for c in chain_coords]
+        self.chain_len = [len(chain_coords[c]) for c in chain_coords]
         self.pdockq = pdockq_max
         self.ppv = ppv_max
         # self.fasta = self._parse_fasta()
@@ -201,11 +213,12 @@ class AFResult(object):
         self.mean_plddt = np.mean(self.plddt)
 
     def _parse_fasta(self):
-        if os.path.exists(os.path.join(self.fasta_dir, self.name + '.fasta')):
-            fasta = SeqIO.read(os.path.join(self.fasta_dir, self.name + '.fasta'), 'fasta')
+        basename = os.path.basename(self.dir)
+        if os.path.exists(self.fasta_path):
+            fasta = SeqIO.read(self.fasta_path, 'fasta')
         else:
-            gene_seq = seq[genename_to_uniprot[self.name]]
-            fasta = SeqIO.SeqRecord(seq=gene_seq+":"+gene_seq, id=self.name)
+            gene_seq = seq[genename_to_uniprot[basename]]
+            fasta = SeqIO.SeqRecord(seq=gene_seq+":"+gene_seq, id=basename)
         return fasta
 
     def _parse_config(self):
@@ -231,3 +244,115 @@ class AFResult(object):
             chain_len=self.chain_len, mean_plddt=self.mean_plddt, iptm=self.iptm, max_pae=self.max_pae, min_pae=self.min_pae, interchain_min_pae=self.interchain_min_pae)
     
 # %%
+class AFMonomer(AFResult):
+    """An AFResult class for AF2 Monomer prediction"""
+    def __init__(self, result_dir, name, fasta_dir=None) -> None:
+        super().__init__(result_dir, name, fasta_dir)
+
+class AFHomodimer(AFResult):
+    """An AFResult class for AF2 Homodimer prediction"""
+
+class AFMultimer(AFResult):
+    """An AFResult class for AF2 Multimer prediction"""
+#%%
+class AFPairseg(object):
+    """
+    Pass the base result directory name Gene1_Gene2. In the directory there are many subfolders like Gene1_1_Gene2_2.
+    Each subfolder contains the AF2 result for the pair of segments between the two genes. The subfolder name is the name for AFResult.
+    The segment corresponds to the low_and_high_plddt_region_sequence in the Protein class.
+    """
+    def __init__(self, results_root_dir, fasta_root_dir) -> None:
+        self.results_root_dir = results_root_dir
+        self.fasta_root_dir = fasta_root_dir
+        self.name = os.path.basename(results_root_dir)
+        self.gene1 = self.name.split('_')[0]
+        self.gene2 = self.name.split('_')[1]
+        self.protein1 = Protein(self.gene1)
+        self.protein2 = Protein(self.gene2)    
+        self.pairs_score, self.pairs_data = self._parse_pairs()
+
+    def _init_score(self, len1, len2):
+        score = {}
+        score['mean_plddt'] = np.zeros((len1, len2))
+        score['max_pae'] = np.zeros((len1, len2))
+        score['min_pae'] = np.zeros((len1, len2))
+        score['iptm'] = np.zeros((len1, len2))
+        score['interchain_min_pae'] = np.zeros((len1, len2))
+        score['pdockq'] = np.zeros((len1, len2))
+        score['ppv'] = np.zeros((len1, len2))
+        score['plddt'] = pd.DataFrame()
+        return score
+    
+    def _parse_pairs(self):
+        pairs = []
+        score = self._init_score(len(self.protein1.low_or_high_plddt_region), len(self.protein2.low_or_high_plddt_region))
+
+        for pair_dir in glob(os.path.join(self.results_root_dir, '*')):
+            pair_name = os.path.basename(pair_dir)
+            seg1 = int(pair_name.split('_')[1])
+            seg2 = int(pair_name.split('_')[3])
+            range1 = self.protein1.low_or_high_plddt_region[seg1]
+            range2 = self.protein2.low_or_high_plddt_region[seg2]
+            pair_fasta = os.path.join(self.fasta_root_dir, pair_name + '.fasta')
+            res = AFResult(pair_dir, pair_fasta)
+            pairs.append(res)
+            score['mean_plddt'][seg1, seg2] = res.mean_plddt
+            score['max_pae'][seg1, seg2] = res.max_pae
+            score['min_pae'][seg1, seg2] = res.min_pae
+            score['iptm'][seg1, seg2] = res.iptm
+            score['interchain_min_pae'][seg1, seg2] = res.interchain_min_pae
+            score['pdockq'][seg1, seg2] = res.pdockq
+            score['ppv'][seg1, seg2] = res.ppv
+            plddt_df = pd.DataFrame({'plddt': res.plddt})
+            plddt_df['seg1'] = f'{self.gene1}_{str(seg1)}'
+            plddt_df['seg2'] = f'{self.gene2}_{str(seg2)}'
+            plddt_df['gene1'] = self.gene1
+            plddt_df['gene2'] = self.gene2
+            plddt_df['gene1_res'] = np.concatenate([np.arange(range1[0], range1[1]), np.repeat(np.nan, range2[1]-range2[0])])
+            plddt_df['gene2_res'] = np.concatenate([np.repeat(np.nan, range1[1]-range1[0]), np.arange(range2[0], range2[1])])
+            score['plddt'] = score['plddt'].append(plddt_df)
+        return score, pairs
+    
+
+    def plot_plddt_gene1(self):
+        fig, ax = plt.subplots(1, 1, figsize=(20, 5))
+        sns.lineplot(x= range(self.protein1.length), y= self.protein1.plddt, ax = ax, color='black', label='monomer', alpha=0.5, linewidth=10)
+        sns.lineplot(x='gene1_res', y='plddt', data=self.pairs_score['plddt'].query('~gene1_res.isna()'), hue = 'seg2', palette='tab20', ax = ax, linewidth=3)
+        # legend right outside, make line in legend thicker
+        legend = ax.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+        for handle in legend.legendHandles:
+            handle.set_linewidth(5.0)
+        # set xlabel to gene1 name
+        ax.set_xlabel(self.gene1)
+        ax.set_ylabel('pLDDT')
+        return fig, ax
+
+    def plot_plddt_gene2(self):
+        fig, ax = plt.subplots(1, 1, figsize=(20, 5))
+        sns.lineplot(x= range(self.protein2.length), y= self.protein2.plddt, ax = ax, color='black', label='monomer', alpha=0.5, linewidth=10)
+        sns.lineplot(x='gene2_res', y='plddt', data=self.pairs_score['plddt'].query('~gene2_res.isna()'), hue = 'seg1', palette='tab20', ax = ax, linewidth=3)
+        # legend right outside, make line in legend thicker
+        legend = ax.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+        for handle in legend.legendHandles:
+            handle.set_linewidth(5.0)
+        # set xlabel to gene2 name
+        ax.set_xlabel(self.gene2)
+        ax.set_ylabel('pLDDT')
+        return fig, ax
+    
+    def plot_score_heatmap(self):
+        fig, axs = plt.subplots(2, 2, figsize=(10, 12))
+        sns.heatmap(self.pairs_score['interchain_min_pae'], cmap='Blues', ax=axs[0, 0], vmin=0, vmax=10)
+        sns.heatmap(self.pairs_score['mean_plddt'], cmap='Blues', ax=axs[0, 1], vmin=0, vmax=100)
+        sns.heatmap(self.pairs_score['iptm'], cmap='Blues', ax=axs[1, 0], vmin=0, vmax=1)
+        sns.heatmap(self.pairs_score['pdockq'], cmap='Blues', ax=axs[1, 1], vmin=0, vmax=0.5)
+
+        axs[0, 0].set_title('interchain_min_pae')
+        axs[0, 1].set_title('mean_plddt')
+        axs[1, 0].set_title('iptm')
+        axs[1, 1].set_title('pdockq')
+        # set y label to gene1 and x to gene2
+        for ax in axs.flat:
+            ax.set(xlabel=f'{self.gene2}', ylabel=f'{self.gene1}')
+        plt.tight_layout()
+        return fig, axs
