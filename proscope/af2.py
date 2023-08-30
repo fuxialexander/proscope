@@ -1,5 +1,4 @@
 # %%
-import gzip
 import json
 import os
 from collections import defaultdict
@@ -10,12 +9,14 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from Bio import SeqIO
-from tqdm import tqdm
 
-from proscope.protein import Protein, setup_global_variables
+from proscope.data import get_seq, get_genename_to_uniprot, get_lddt
 
-# %%
-setup_global_variables()
+seq = get_seq()
+genename_to_uniprot = get_genename_to_uniprot()
+lddt = get_lddt()
+from proscope.protein import Protein
+
 
 # %%
 def parse_atm_record(line):
@@ -407,7 +408,7 @@ class AFPairseg(object):
                     np.arange(range2[0], range2[1]),
                 ]
             )
-            score["plddt"] = pd.concat([score["plddt"],plddt_df])
+            score["plddt"] = pd.concat([score["plddt"], plddt_df])
         return score, pairs
 
     def plot_plddt_gene1(self):
@@ -431,7 +432,9 @@ class AFPairseg(object):
             linewidth=3,
         )
         # legend right outside, make line in legend thicker
-        legend = ax.legend(bbox_to_anchor=(1.05, 1, 0.1, 0.1), loc=2, borderaxespad=0.0, fontsize=16)
+        legend = ax.legend(
+            bbox_to_anchor=(1.05, 1, 0.1, 0.1), loc=2, borderaxespad=0.0, fontsize=16
+        )
         for handle in legend.legendHandles:
             handle.set_linewidth(5.0)
         # set xlabel to gene1 name
@@ -461,7 +464,9 @@ class AFPairseg(object):
             linewidth=3,
         )
         # legend right outside, make line in legend thicker
-        legend = ax.legend(bbox_to_anchor=(1.05, 1, 0.1, 0.1), loc=2, borderaxespad=0.0, fontsize=16)
+        legend = ax.legend(
+            bbox_to_anchor=(1.05, 1, 0.1, 0.1), loc=2, borderaxespad=0.0, fontsize=16
+        )
         for handle in legend.legendHandles:
             handle.set_linewidth(5.0)
         # set xlabel to gene2 name

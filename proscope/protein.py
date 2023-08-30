@@ -1,5 +1,3 @@
-# base class of a protein, plddt-based domain detection and visualization
-#%%
 from Bio import SeqIO
 import numpy as np
 from matplotlib.patches import Patch
@@ -9,94 +7,66 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import os
 import xmlschema
-# from proscope.af2 import AFResult
-#%%
-schema = xmlschema.XMLSchema('https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot.xsd')
-#%%
-# check if seq is in globals() # TODO somehow it's still loading twice. need to figure out a way to fast loading it
-def setup_global_variables():
-    if 'seq' not in globals():
-        seq = {}
-        with gzip.open(f'{os.path.dirname(__file__)}/uniprot_sprot.fasta.gz', 'rt') as f:
-            for record in tqdm(SeqIO.parse(f, "fasta")):
-                id = record.id.split('|')[1]
-                seq[id] = record.seq
-        globals()['seq'] = seq
+from proscope.data import get_seq, get_genename_to_uniprot, get_lddt, get_schema
 
-    if 'genename_to_uniprot' not in globals():
-        # load using __file__ relative path
-        globals()['genename_to_uniprot'] = pd.read_csv(f'{os.path.dirname(__file__)}/uniprot_to_genename.txt', sep='\t').set_index('To').to_dict()['From']
+seq = get_seq()
+genename_to_uniprot = get_genename_to_uniprot()
+lddt = get_lddt()
+schema = get_schema()
 
 
-    if 'lddt' not in globals():
-        if not os.path.exists(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle'):
-            lddt = dict()
-            with open(f'{os.path.dirname(__file__)}/9606.pLDDT.tdt', 'r') as f:
-                for line in f:
-                    id, score = line.strip().split('\t')
-                    lddt[id] = np.array(score.split(",")).astype(float)
-            # save lddt to a pickle file
-            import pickle
-            with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'wb') as f:
-                pickle.dump(lddt, f)
-        else:
-            import pickle
-            with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'rb') as f:
-                lddt = pickle.load(f)
-        globals()['lddt'] = lddt
-
-setup_global_variables()
-#%%
 class Protein(object):
     """Protein class"""
+
     def __init__(self, gene_name, homodimer=False):
         """
         Args:
         """
         self.gene_name = gene_name
-        self.uniprot_id = globals()['genename_to_uniprot'][gene_name]
-        self.plddt = globals()['lddt'][self.uniprot_id]
+        self.uniprot_id = genename_to_uniprot[gene_name]
+        self.plddt = lddt[self.uniprot_id]
         self.length = len(self.plddt)
         self.sequence = globals()['seq'][self.uniprot_id]
         self.smoothed_plddt = self.get_smooth_plddt()
         self.domains = self.get_domain_from_uniprot()
-    
+
     def get_domain_from_uniprot(self):
-        '''Get domain information from uniprot'''
+        """Get domain information from uniprot"""
         uniprot_id = self.uniprot_id
         url = f"https://www.uniprot.org/uniprot/{uniprot_id}.xml"
         entry_dict = schema.to_dict(url)
-        features = entry_dict['entry'][0]['feature']
+        features = entry_dict["entry"][0]["feature"]
         df = []
         for feature in features:
-            feature_type = feature['@type']
-            if feature_type == 'chain':
+            feature_type = feature["@type"]
+            if feature_type == "chain":
                 continue
-            if 'begin' in feature['location']:
-                if '@description' in feature:
-                    feature_description = feature['@description']
+            if "begin" in feature["location"]:
+                if "@description" in feature:
+                    feature_description = feature["@description"]
                 else:
-                    feature_description = feature['@type']
-                feature_begin = feature['location']['begin']['@position']
-                feature_end = feature['location']['end']['@position']
+                    feature_description = feature["@type"]
+                feature_begin = feature["location"]["begin"]["@position"]
+                feature_end = feature["location"]["end"]["@position"]
             else:
                 continue
 
-            df.append({
-                'feature_type': feature_type,
-                'feature_description': feature_description,
-                'feature_begin': feature_begin,
-                'feature_end': feature_end
-            })
+            df.append(
+                {
+                    "feature_type": feature_type,
+                    "feature_description": feature_description,
+                    "feature_begin": feature_begin,
+                    "feature_end": feature_end,
+                }
+            )
 
         return pd.DataFrame(df)
 
-
     def get_smooth_plddt(self, window_size=10):
-        result = np.convolve(self.plddt, np.ones(
-            window_size)/window_size, mode='same')
-        return result/np.max(result)
-
+        result = np.convolve(
+            self.plddt, np.ones(window_size) / window_size, mode="same"
+        )
+        return result / np.max(result)
 
     def plot_plddt(self, to_compare=None, filename=None):
         fig, ax = plt.subplots(figsize=(20, 5))
@@ -105,55 +75,68 @@ class Protein(object):
             plt.plot(to_compare)
         # highlight low plddt region
         for region in self.low_plddt_region:
-            plt.axvspan(region[0], region[1], ymax=1, ymin=0.8, color='red', alpha=0.2)
-        
+            plt.axvspan(region[0], region[1], ymax=1, ymin=0.8, color="red", alpha=0.2)
+
         # highlight domain, color by feature_type
-        cmap = plt.get_cmap('tab20').colors
+        cmap = plt.get_cmap("tab20").colors
         # map feature_type to color
         feature_type_to_color = {}
         for i, t in enumerate(self.domains.feature_type.unique()):
             feature_type_to_color[t] = cmap[i]
 
-        y_span = 0.8/len(self.domains.feature_type.unique())
+        y_span = 0.8 / len(self.domains.feature_type.unique())
         for i, domain in self.domains.iterrows():
-            idx = np.where(self.domains.feature_type.unique()==domain.feature_type)[0][0]
-            plt.axvspan(domain.feature_begin, domain.feature_end, ymax=idx * y_span + y_span, ymin=idx * y_span 
-             , color=feature_type_to_color[domain.feature_type], alpha=0.2)
+            idx = np.where(self.domains.feature_type.unique() == domain.feature_type)[
+                0
+            ][0]
+            plt.axvspan(
+                domain.feature_begin,
+                domain.feature_end,
+                ymax=idx * y_span + y_span,
+                ymin=idx * y_span,
+                color=feature_type_to_color[domain.feature_type],
+                alpha=0.2,
+            )
         # add legend of domain color
         legend_elements = []
         for i in self.domains.feature_type.unique():
             legend_elements.append(Patch(facecolor=feature_type_to_color[i], label=i))
-            #reverse the order of legend
+            # reverse the order of legend
         legend_elements = legend_elements[::-1]
         # add number index of low or high plddt region on top of the plot
         for i, region in enumerate(self.low_or_high_plddt_region):
             plt.text(region[0], 0.9, f"{i}", fontsize=12)
-        # legend outside the plot, 
-        plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1, 0.1, 0.1), loc='upper left', borderaxespad=0., fontsize=16)
+        # legend outside the plot,
+        plt.legend(
+            handles=legend_elements,
+            bbox_to_anchor=(1.05, 1, 0.1, 0.1),
+            loc="upper left",
+            borderaxespad=0.0,
+            fontsize=16,
+        )
         plt.title(f"{self.gene_name} pLDDT")
         plt.xlabel("Residue")
         plt.ylabel("pLDDT")
         plt.tight_layout()
         if filename is not None:
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
         plt.show()
         return fig, ax
-
 
     @property
     def low_plddt_region(self, threshold=0.6):
         idx = np.where(self.smoothed_plddt < threshold)[0]
-        # get regions from idx, join two regions if they are close (<30aa apart) 
+        # get regions from idx, join two regions if they are close (<30aa apart)
         regions = []
         for i in idx:
             if len(regions) == 0:
-                regions.append([i, i+1])
+                regions.append([i, i + 1])
             else:
                 if i - regions[-1][1] < 30:
                     regions[-1][1] = i
                 else:
-                    regions.append([i, i+1])
-        
+                    regions.append([i, i + 1])
+
         for i in regions:
             if i[1] - i[0] < 30:
                 regions.remove(i)
@@ -164,9 +147,21 @@ class Protein(object):
         regions = self.low_plddt_region
         sequences = []
         for i, region in enumerate(regions):
-            s = SeqIO.SeqRecord(self.sequence[region[0]:region[1]], id = self.gene_name + "_" + str(i), name=self.gene_name, description=self.gene_name+"_"+str(i)+": "+str(region[0])+"-"+str(region[1]))
+            s = SeqIO.SeqRecord(
+                self.sequence[region[0] : region[1]],
+                id=self.gene_name + "_" + str(i),
+                name=self.gene_name,
+                description=self.gene_name
+                + "_"
+                + str(i)
+                + ": "
+                + str(region[0])
+                + "-"
+                + str(region[1]),
+            )
             sequences.append(s)
         return sequences
+
     @property
     def low_or_high_plddt_region(self, threshold=0.6):
         """Get regions with low plddt and high plddt, define breakpoint by merge regions if they are close (<30bp apart)
@@ -184,18 +179,20 @@ class Protein(object):
         # (0, 15, 60, 200, 240, 264)
         len_breakpoint = len(region_breakpoint)
         region_breakpoint_output = region_breakpoint.copy()
-        for i in range(len_breakpoint-1):
+        for i in range(len_breakpoint - 1):
             # len(region_breakpoint) = 6; range(5) = 0, 1, 2, 3, 4
-            if region_breakpoint[i+1] - region_breakpoint[i] < 30:
-                if i == len_breakpoint-2: # i = 4, second last region
+            if region_breakpoint[i + 1] - region_breakpoint[i] < 30:
+                if i == len_breakpoint - 2:  # i = 4, second last region
                     if region_breakpoint[i] in region_breakpoint_output:
                         region_breakpoint_output.remove(region_breakpoint[i])
                 else:
-                    if region_breakpoint[i+1] in region_breakpoint_output:
-                        region_breakpoint_output.remove(region_breakpoint[i+1])
+                    if region_breakpoint[i + 1] in region_breakpoint_output:
+                        region_breakpoint_output.remove(region_breakpoint[i + 1])
         regions = []
-        for i in range(len(region_breakpoint_output)-1):
-            regions.append([region_breakpoint_output[i], region_breakpoint_output[i+1]])
+        for i in range(len(region_breakpoint_output) - 1):
+            regions.append(
+                [region_breakpoint_output[i], region_breakpoint_output[i + 1]]
+            )
 
         return regions
 
@@ -204,6 +201,17 @@ class Protein(object):
         # get regions list from low_plddt_region, keep also high plddt regions
         sequences = []
         for i, region in enumerate(self.low_or_high_plddt_region):
-            s = SeqIO.SeqRecord(self.sequence[region[0]:region[1]], id = self.gene_name + "_" + str(i), name=self.gene_name, description=self.gene_name+"_"+str(i)+": "+str(region[0])+"-"+str(region[1]))
+            s = SeqIO.SeqRecord(
+                self.sequence[region[0] : region[1]],
+                id=self.gene_name + "_" + str(i),
+                name=self.gene_name,
+                description=self.gene_name
+                + "_"
+                + str(i)
+                + ": "
+                + str(region[0])
+                + "-"
+                + str(region[1]),
+            )
             sequences.append(s)
         return sequences
