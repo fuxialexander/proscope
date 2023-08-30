@@ -14,24 +14,38 @@ import xmlschema
 schema = xmlschema.XMLSchema('https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot.xsd')
 #%%
 # check if seq is in globals() # TODO somehow it's still loading twice. need to figure out a way to fast loading it
-if 'seq' not in globals():
-    seq = {}
-    with gzip.open(f'{os.path.dirname(__file__)}/uniprot_sprot.fasta.gz', 'rt') as f:
-        for record in tqdm(SeqIO.parse(f, "fasta")):
-            id = record.id.split('|')[1]
-            seq[id] = record.seq
+def setup_global_variables():
+    if 'seq' not in globals():
+        seq = {}
+        with gzip.open(f'{os.path.dirname(__file__)}/uniprot_sprot.fasta.gz', 'rt') as f:
+            for record in tqdm(SeqIO.parse(f, "fasta")):
+                id = record.id.split('|')[1]
+                seq[id] = record.seq
+        globals()['seq'] = seq
 
-if 'genename_to_uniprot' not in globals():
-    # load using __file__ relative path
-    genename_to_uniprot = pd.read_csv(f'{os.path.dirname(__file__)}/uniprot_to_genename.txt', sep='\t').set_index('To').to_dict()['From']
+    if 'genename_to_uniprot' not in globals():
+        # load using __file__ relative path
+        globals()['genename_to_uniprot'] = pd.read_csv(f'{os.path.dirname(__file__)}/uniprot_to_genename.txt', sep='\t').set_index('To').to_dict()['From']
 
-if 'lddt' not in globals():
-    lddt = dict()
-    with open(f'{os.path.dirname(__file__)}/9606.pLDDT.tdt', 'r') as f:
-        for line in f:
-            id, score = line.strip().split('\t')
-            lddt[id] = np.array(score.split(",")).astype(float)
 
+    if 'lddt' not in globals():
+        if not os.path.exists(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle'):
+            lddt = dict()
+            with open(f'{os.path.dirname(__file__)}/9606.pLDDT.tdt', 'r') as f:
+                for line in f:
+                    id, score = line.strip().split('\t')
+                    lddt[id] = np.array(score.split(",")).astype(float)
+            # save lddt to a pickle file
+            import pickle
+            with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'wb') as f:
+                pickle.dump(lddt, f)
+        else:
+            import pickle
+            with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'rb') as f:
+                lddt = pickle.load(f)
+        globals()['lddt'] = lddt
+
+setup_global_variables()
 #%%
 class Protein(object):
     """Protein class"""
@@ -40,8 +54,8 @@ class Protein(object):
         Args:
         """
         self.gene_name = gene_name
-        self.uniprot_id = genename_to_uniprot[gene_name]
-        self.plddt = lddt[self.uniprot_id]
+        self.uniprot_id = globals()['genename_to_uniprot'][gene_name]
+        self.plddt = globals()['lddt'][self.uniprot_id]
         self.length = len(self.plddt)
         self.sequence = seq[self.uniprot_id]
         self.smoothed_plddt = self.get_smooth_plddt()
@@ -53,7 +67,7 @@ class Protein(object):
         url = f"https://www.uniprot.org/uniprot/{uniprot_id}.xml"
         entry_dict = schema.to_dict(url)
         features = entry_dict['entry'][0]['feature']
-        df = pd.DataFrame()
+        df = []
         for feature in features:
             feature_type = feature['@type']
             if feature_type == 'chain':
@@ -68,14 +82,14 @@ class Protein(object):
             else:
                 continue
 
-            df = df.append({
+            df.append({
                 'feature_type': feature_type,
                 'feature_description': feature_description,
                 'feature_begin': feature_begin,
                 'feature_end': feature_end
-            }, ignore_index=True)
+            })
 
-        return df
+        return pd.DataFrame(df)
 
 
     def get_smooth_plddt(self, window_size=10):
@@ -85,7 +99,7 @@ class Protein(object):
 
 
     def plot_plddt(self, to_compare=None, filename=None):
-        plt.figure(figsize=(20, 5))
+        fig, ax = plt.subplots(figsize=(20, 5))
         plt.plot(self.plddt)
         if to_compare is not None:
             plt.plot(to_compare)
@@ -114,14 +128,16 @@ class Protein(object):
         # add number index of low or high plddt region on top of the plot
         for i, region in enumerate(self.low_or_high_plddt_region):
             plt.text(region[0], 0.9, f"{i}", fontsize=12)
-        # legend outside the plot
-        plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+        # legend outside the plot, 
+        plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1, 0.1, 0.1), loc='upper left', borderaxespad=0., fontsize=16)
         plt.title(f"{self.gene_name} pLDDT")
         plt.xlabel("Residue")
         plt.ylabel("pLDDT")
+        plt.tight_layout()
         if filename is not None:
             plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.show()
+        return fig, ax
 
 
     @property
