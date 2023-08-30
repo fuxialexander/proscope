@@ -1,0 +1,3 @@
+include proscope/uniprot_sprot.fasta.gz
+include proscope/uniprot_to_genename.txt
+include proscope/9606.pLDDT.tdt
