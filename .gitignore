@@ -8,3 +8,4 @@ data/causal_ep300_db.tar.gz
 data/causal_top_pair_per_celltype_df_non_redundant_pair_with_count.csv
 proscope/9606.pLDDT.pickle
 build
+proscope.egg-info
