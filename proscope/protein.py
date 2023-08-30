@@ -26,7 +26,7 @@ class Protein(object):
         self.uniprot_id = genename_to_uniprot[gene_name]
         self.plddt = lddt[self.uniprot_id]
         self.length = len(self.plddt)
-        self.sequence = globals()['seq'][self.uniprot_id]
+        self.sequence = seq[self.uniprot_id]
         self.smoothed_plddt = self.get_smooth_plddt()
         self.domains = self.get_domain_from_uniprot()
 
