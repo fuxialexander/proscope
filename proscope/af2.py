@@ -280,7 +280,7 @@ class AFResult(object):
         if os.path.exists(self.fasta_path):
             fasta = SeqIO.read(self.fasta_path, "fasta")
         else:
-            gene_seq = seq[genename_to_uniprot[basename]]
+            gene_seq = globals()['seq'][globals()['genename_to_uniprot'][basename]]
             fasta = SeqIO.SeqRecord(seq=gene_seq + ":" + gene_seq, id=basename)
         return fasta
 
