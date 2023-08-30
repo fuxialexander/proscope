@@ -339,6 +339,17 @@ class AFMultimer(AFResult):
 
 
 # %%
+def min_max(arr):
+    """normalize an array to 0-1"""
+    if isinstance(arr, np.array):
+        return (arr - arr.min()) / (arr.max() - arr.min())
+    elif isinstance(arr, list):
+        return [(a - min(arr)) / (max(arr) - min(arr)) for a in arr]
+    elif isinstance(arr, pd.DataFrame):
+        arr_copy = arr.copy()
+        arr_copy['plddt'] = (arr_copy['plddt'] - arr_copy['plddt'].min()) / (arr_copy['plddt'].max() - arr_copy['plddt'].min())
+        return arr_copy
+
 class AFPairseg(object):
     """
     Pass the base result directory name Gene1_Gene2. In the directory there are many subfolders like Gene1_1_Gene2_2.
@@ -415,7 +426,7 @@ class AFPairseg(object):
         fig, ax = plt.subplots(1, 1, figsize=(20, 5))
         sns.lineplot(
             x=range(self.protein1.length),
-            y=self.protein1.plddt,
+            y=min_max(self.protein1.plddt),
             ax=ax,
             color="black",
             label="monomer",
@@ -425,7 +436,7 @@ class AFPairseg(object):
         sns.lineplot(
             x="gene1_res",
             y="plddt",
-            data=self.pairs_score["plddt"].query("~gene1_res.isna()"),
+            data=min_max(self.pairs_score["plddt"].query("~gene1_res.isna()")),
             hue="seg2",
             palette="tab20",
             ax=ax,
@@ -447,7 +458,7 @@ class AFPairseg(object):
         fig, ax = plt.subplots(1, 1, figsize=(20, 5))
         sns.lineplot(
             x=range(self.protein2.length),
-            y=self.protein2.plddt,
+            y=min_max(self.protein2.plddt),
             ax=ax,
             color="black",
             label="monomer",
@@ -457,7 +468,7 @@ class AFPairseg(object):
         sns.lineplot(
             x="gene2_res",
             y="plddt",
-            data=self.pairs_score["plddt"].query("~gene2_res.isna()"),
+            data=min_max(self.pairs_score["plddt"].query("~gene2_res.isna()")),
             hue="seg1",
             palette="tab20",
             ax=ax,
