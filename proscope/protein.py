@@ -62,7 +62,7 @@ def extract_pos_from_mut(str):
 class Protein(object):
     """Protein class"""
 
-    def __init__(self, gene_name, homodimer=False):
+    def __init__(self, gene_name, homodimer=False, use_es=True):
         """
         Args:
         """
@@ -73,11 +73,13 @@ class Protein(object):
         self.sequence = seq[self.uniprot_id]
         self.smoothed_plddt_gaussian = self.get_smooth_plddt_gaussian()
         self.smoothed_plddt = self.get_smooth_plddt()
-        self.grad = self.get_plddt_grad()
-        self.pairwise_distance = self.get_pairwise_distance(dimer=False)
-        self.esm = self.get_esm()
-        self.es = smooth(self.get_final_score_gated_grad_3d())
         self.domains = self.get_domain_from_uniprot()
+
+        if use_es:
+            self.grad = self.get_plddt_grad()
+            self.pairwise_distance = self.get_pairwise_distance(dimer=False)
+            self.esm = self.get_esm()
+            self.es = smooth(self.get_final_score_gated_grad_3d())
 
     def get_domain_from_uniprot(self):
         """Get domain information from uniprot"""
@@ -314,7 +316,7 @@ class Protein(object):
         plt.plot(self.smoothed_plddt, label='pLDDT', color='orange')
         if to_compare is not None:
             plt.plot(to_compare)
-        else:
+        elif self.es is not None:
             plt.plot(self.es, label='ES', color='blue')
         if show_low_plddt:
         # highlight low plddt region
@@ -323,7 +325,8 @@ class Protein(object):
 
         if pos_to_highlight is not None:
             pos_to_highlight = np.array(pos_to_highlight)-1
-            plt.scatter(pos_to_highlight, self.es[pos_to_highlight], color='blue', s=50)
+            if self.es is not None:
+                plt.scatter(pos_to_highlight, self.es[pos_to_highlight], color='blue', s=50)
             plt.scatter(pos_to_highlight, self.smoothed_plddt[pos_to_highlight], color='orange', s=50)
 
         if show_domain:
