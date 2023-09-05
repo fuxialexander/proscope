@@ -62,8 +62,8 @@ def initialize_lddt():
             for line in f:
                 id, score = line.strip().split('\t')
                 _lddt[id] = np.array(score.split(",")).astype(float)
-        with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'wb') as f:
-            pickle.dump(_lddt, f)
+        # with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'wb') as f:
+        #     pickle.dump(_lddt, f)
     else:
         with open(f'{os.path.dirname(__file__)}/9606.pLDDT.pickle', 'rb') as f:
             _lddt = pickle.load(f)
