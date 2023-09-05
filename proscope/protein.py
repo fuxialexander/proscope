@@ -62,7 +62,7 @@ def extract_pos_from_mut(str):
 class Protein(object):
     """Protein class"""
 
-    def __init__(self, gene_name, homodimer=False, use_es=True):
+    def __init__(self, gene_name, homodimer=False, use_es=False):
         """
         Args:
         """
