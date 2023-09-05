@@ -316,7 +316,7 @@ class Protein(object):
         plt.plot(self.smoothed_plddt, label='pLDDT', color='orange')
         if to_compare is not None:
             plt.plot(to_compare)
-        elif self.es is not None:
+        elif hasattr(self, 'es'):
             plt.plot(self.es, label='ES', color='blue')
         if show_low_plddt:
         # highlight low plddt region
@@ -325,7 +325,7 @@ class Protein(object):
 
         if pos_to_highlight is not None:
             pos_to_highlight = np.array(pos_to_highlight)-1
-            if self.es is not None:
+            if hasattr(self, 'es'):
                 plt.scatter(pos_to_highlight, self.es[pos_to_highlight], color='blue', s=50)
             plt.scatter(pos_to_highlight, self.smoothed_plddt[pos_to_highlight], color='orange', s=50)
 
