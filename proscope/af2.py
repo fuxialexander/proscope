@@ -341,7 +341,7 @@ class AFMultimer(AFResult):
 # %%
 def min_max(arr):
     """normalize an array to 0-1"""
-    if isinstance(arr, np.array):
+    if isinstance(arr, np.ndarray):
         return (arr - arr.min()) / (arr.max() - arr.min())
     elif isinstance(arr, list):
         return [(a - min(arr)) / (max(arr) - min(arr)) for a in arr]
