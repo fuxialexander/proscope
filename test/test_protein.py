@@ -1,9 +1,32 @@
 # %%
-from proscope.protein import Protein
-a = Protein('RARA')
+import sys
+sys.path.append('/home/xf2217/Projects/proscope/proscope')
+from protein import Protein, generate_pair_sequence
+import os
 #%%
-a.plot_plddt()
-
+generate_pair_sequence('PAX5', 'RARA', 'test_causal_db/sequences/causal_edges_db/PAX5_RARA')
+#%%
+generate_pair_sequence('TAL1', 'SIN3A', 'test_causal_db/sequences/other/')
+#%%
+import pandas as pd
+df = pd.read_csv('../data/content/ALL_hum_isoforms_ESM1b_LLR/O95274_LLR.csv', index_col=0)
+# melt to long format, column, row, value
+df = df.reset_index().melt(id_vars='index')
+df['variant'] = df['variable'].str.replace(' ', '') + df['index'].astype(str)
+df['pos'] = df['variable'].apply(lambda x: int(x.split(' ')[1]))
+df = df.rename({'value': 'esm'}, axis=1)
+df = df[['variant', 'pos', 'esm']]
+#%%
+a = Protein('PAX5')
+#%%
+fig, ax = a.plot_plddt(show_domain=True, show_low_plddt=False)
+# add legent
+ax.set_xlim(0, len(a.plddt))
+ax.set_xticks(range(0, len(a.plddt), 500))
+# add lines at 300, 400, 500 with height 0.1, 0.3, 0.5
+ax.axvline(30, ymax=0.1, color='grey', linestyle='-')
+ax.axvline(40, ymax=0.3, color='grey', linestyle='-')
+ax.axvline(50, ymax=0.5, color='grey', linestyle='-')
 #%%
 b = Protein('STAT3')
 b.plot_plddt()
@@ -102,7 +125,7 @@ for i in [1,3,7,8,10]:
         print(f">snai_rela_ep300_{i}", file=f)
         print(str(a.low_or_high_plddt_region_sequence[1].seq) + ':' + str(b.low_or_high_plddt_region_sequence[0].seq) + ':' + str(c.low_or_high_plddt_region_sequence[i].seq), file=f)
 # %%
-d = Protein('TFAP2C')
+df = Protein('TFAP2C')
 # %%
 b.plot_plddt()
 # %%

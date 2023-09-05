@@ -1,3 +1,4 @@
+from genericpath import exists
 from Bio import SeqIO
 import numpy as np
 from matplotlib.patches import Patch
@@ -7,6 +8,12 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import os
 import xmlschema
+from Bio.PDB import PDBParser
+from Bio import SeqIO
+# gaussian filter
+from scipy.ndimage import gaussian_filter1d
+from tqdm import tqdm
+bioparser = PDBParser()
 from proscope.data import get_seq, get_genename_to_uniprot, get_lddt, get_schema
 
 seq = get_seq()
@@ -14,6 +21,43 @@ genename_to_uniprot = get_genename_to_uniprot()
 lddt = get_lddt()
 schema = get_schema()
 
+def generate_pair_sequence(P1, P2, output_dir):
+    """generate pair sequence from row"""
+    protein_a = Protein(P1)
+    protein_b = Protein(P2)
+    low_or_high_plddt_region_sequence_a = protein_a.low_or_high_plddt_region_sequence
+    low_or_high_plddt_region_sequence_b = protein_b.low_or_high_plddt_region_sequence
+    for i, seq_a in enumerate(low_or_high_plddt_region_sequence_a):
+        for j, seq_b in enumerate(low_or_high_plddt_region_sequence_b):
+            os.makedirs(f"{output_dir}/", exist_ok=True)
+            filename = f"{output_dir}/{protein_a.gene_name}_{i}_{protein_b.gene_name}_{j}.fasta"
+            with open(filename, 'w') as f:
+                f.write(f">{protein_a.gene_name}_{i}.{protein_b.gene_name}_{j}\n{str(seq_a.seq)}:{str(seq_b.seq)}\n")
+
+def normalize(x):
+    new_x = x-x.min()
+    return new_x/new_x.max()
+
+def smooth(x, window_size=10):
+    result = gaussian_filter1d(x, sigma=window_size/2)
+    return normalize(result)
+
+def get_3d_avg(x, pairwise_interaction):
+    x = x * pairwise_interaction
+    x = x.sum(1)/((x > 0).sum(1)+0.01)
+    return x/x.max()
+
+def square_grad(f):
+    return normalize(np.gradient(f) ** 2)
+
+def extract_wt_from_mut(str):
+    return str[0:1]
+
+def extract_alt_from_mut(str):
+    return str[-1:]
+
+def extract_pos_from_mut(str):
+    return int(str[1:-1])
 
 class Protein(object):
     """Protein class"""
@@ -27,7 +71,12 @@ class Protein(object):
         self.plddt = lddt[self.uniprot_id]
         self.length = len(self.plddt)
         self.sequence = seq[self.uniprot_id]
+        self.smoothed_plddt_gaussian = self.get_smooth_plddt_gaussian()
         self.smoothed_plddt = self.get_smooth_plddt()
+        self.grad = self.get_plddt_grad()
+        self.pairwise_distance = self.get_pairwise_distance(dimer=False)
+        self.esm = self.get_esm()
+        self.es = smooth(self.get_final_score_gated_grad_3d())
         self.domains = self.get_domain_from_uniprot()
 
     def get_domain_from_uniprot(self):
@@ -67,61 +116,42 @@ class Protein(object):
             self.plddt, np.ones(window_size) / window_size, mode="same"
         )
         return result / np.max(result)
+    
+    def get_smooth_plddt_gaussian(self, sigma=2):
+        result = gaussian_filter1d(self.plddt, sigma=sigma)
+        return result / np.max(result)
 
-    def plot_plddt(self, to_compare=None, filename=None):
-        fig, ax = plt.subplots(figsize=(20, 5))
-        plt.plot(self.plddt)
-        if to_compare is not None:
-            plt.plot(to_compare)
-        # highlight low plddt region
-        for region in self.low_plddt_region:
-            plt.axvspan(region[0], region[1], ymax=1, ymin=0.8, color="red", alpha=0.2)
+    def get_plddt_grad(self):
+        grad = square_grad(self.smoothed_plddt_gaussian)
+        grad = np.clip(grad, np.quantile(grad, 0.2), np.quantile(grad, 0.8))
+        return grad
 
-        # highlight domain, color by feature_type
-        cmap = plt.get_cmap("tab20").colors
-        # map feature_type to color
-        feature_type_to_color = {}
-        for i, t in enumerate(self.domains.feature_type.unique()):
-            feature_type_to_color[t] = cmap[i]
-
-        y_span = 0.8 / len(self.domains.feature_type.unique())
-        for i, domain in self.domains.iterrows():
-            idx = np.where(self.domains.feature_type.unique() == domain.feature_type)[
-                0
-            ][0]
-            plt.axvspan(
-                domain.feature_begin,
-                domain.feature_end,
-                ymax=idx * y_span + y_span,
-                ymin=idx * y_span,
-                color=feature_type_to_color[domain.feature_type],
-                alpha=0.2,
-            )
-        # add legend of domain color
-        legend_elements = []
-        for i in self.domains.feature_type.unique():
-            legend_elements.append(Patch(facecolor=feature_type_to_color[i], label=i))
-            # reverse the order of legend
-        legend_elements = legend_elements[::-1]
-        # add number index of low or high plddt region on top of the plot
-        for i, region in enumerate(self.low_or_high_plddt_region):
-            plt.text(region[0], 0.9, f"{i}", fontsize=12)
-        # legend outside the plot,
-        plt.legend(
-            handles=legend_elements,
-            bbox_to_anchor=(1.05, 1, 0.1, 0.1),
-            loc="upper left",
-            borderaxespad=0.0,
-            fontsize=16,
-        )
-        plt.title(f"{self.gene_name} pLDDT")
-        plt.xlabel("Residue")
-        plt.ylabel("pLDDT")
-        plt.tight_layout()
-        if filename is not None:
-            plt.savefig(filename, dpi=300, bbox_inches="tight")
-        plt.show()
-        return fig, ax
+    def get_esm(self, format='pos'):
+        """Use UNIPROT_ID to get ESM score from ESM1b model"""
+        # read PAX5 (PAX5) | Q02548.csv
+        # variant,score,pos
+        # M1K,-8.983,1
+        # M1R,-8.712,1
+        df = pd.read_csv(f'../data/content/ALL_hum_isoforms_ESM1b_LLR/{self.uniprot_id}_LLR.csv', index_col=0)
+        if format == 'long':
+        # melt to long format, column, row, value
+            df = df.reset_index().melt(id_vars='index')
+            df['variant'] = df['variable'].str.replace(' ', '') + df['index'].astype(str)
+            df['pos'] = df['variable'].apply(lambda x: int(x.split(' ')[1]))
+            df = df.rename({'value': 'esm'}, axis=1)
+            df = df[['variant', 'pos', 'esm']]
+            return df
+        elif format == 'wide':
+            return df
+        elif format == 'pos':
+            return normalize(-df.mean(0).values)
+        # df['ALT'] = df.variant.apply(extract_alt_from_mut)
+        # df['REF'] = df.variant.apply(extract_wt_from_mut)
+        # df['esm'] = df['esm'].astype(float)
+        # df['pos'] = df['pos'].astype(int)
+        # df = df[['esm', 'ALT', 'pos']].pivot_table(index='ALT', columns='pos', values='esm').fillna(0)
+        # df = normalize(-df.mean(0).values)
+        # return df
 
     @property
     def low_plddt_region(self, threshold=0.6):
@@ -215,3 +245,139 @@ class Protein(object):
             )
             sequences.append(s)
         return sequences
+
+    def get_final_score_gated_grad_3d(self, interaction_threshold=20):
+        f = self.grad * self.esm
+        pairwise_interaction = self.pairwise_distance < interaction_threshold
+        f[(self.smoothed_plddt<0.5)]=0
+        f = get_3d_avg(f, pairwise_interaction) 
+        f = normalize(f) 
+        
+        return f
+
+    def get_pairwise_distance(self, dimer=False):
+        if dimer:
+            structure = bioparser.get_structure('homodimer', 'dimer_structures/' + self.gene_name + '.pdb')
+            model = structure[0]
+            chain = model['A']
+            residues = [r for r in model.get_residues()]
+            whole_len = len(residues)
+            chain_len = len(chain)
+            distance = np.zeros((whole_len, whole_len))
+            for i, residue1 in enumerate(residues):
+                for j, residue2 in enumerate(residues):
+                    # compute distance between CA atoms
+                    try:
+                        d = residue1['CA'] - residue2['CA']
+                        distance[i][j] = d
+                        distance[j][i] = d
+                    except KeyError:
+                        continue
+            distance = np.fmin(
+                    distance[0:chain_len, 0:chain_len], distance[0:chain_len, chain_len:whole_len])
+
+        else:
+            if exists("../pairwise_interaction/"+self.uniprot_id+".npy"):
+                distance = np.load("../pairwise_interaction/"+self.uniprot_id+".npy")
+            else:
+                # download pdb file from AFDB to structures/
+                import urllib.request
+                url = 'https://alphafold.ebi.ac.uk/files/AF-' + self.uniprot_id + '-F1-model_v4.pdb'
+                urllib.request.urlretrieve(url, '../structures/AF-' + self.uniprot_id + '-F1-model_v4.pdb')
+
+                # https://alphafold.ebi.ac.uk/files/AF-Q02548-F1-model_v4.pdb
+                with open('../structures/AF-' + self.uniprot_id + '-F1-model_v4.pdb', 'r') as f:
+                    structure = bioparser.get_structure('monomer', f)
+
+
+                model = structure[0]
+                chain = model['A']
+                residues = [r for r in model.get_residues()]
+                whole_len = len(residues)
+                chain_len = len(chain)
+                distance = np.zeros((whole_len, whole_len))
+                for i, residue1 in enumerate(residues):
+                    for j, residue2 in enumerate(residues):
+                        # compute distance between CA atoms
+                        try:
+                            d = residue1['CA'] - residue2['CA']
+                            distance[i][j] = d
+                            distance[j][i] = d
+                        except KeyError:
+                            continue
+
+            np.save("../pairwise_interaction/" + self.uniprot_id + ".npy", distance)
+        return distance
+    
+    def plot_plddt(self, pos_to_highlight=None, to_compare=None, filename=None, show_low_plddt=True, show_domain=True, domains_to_show=['region of interest', 'DNA-binding region', 'splice variant']):
+        fig, ax = plt.subplots(figsize=(20, 5))
+        plt.plot(self.smoothed_plddt, label='pLDDT', color='orange')
+        if to_compare is not None:
+            plt.plot(to_compare)
+        else:
+            plt.plot(self.es, label='ES', color='blue')
+        if show_low_plddt:
+        # highlight low plddt region
+            for region in self.low_plddt_region:
+                plt.axvspan(region[0], region[1], ymax=1, ymin=0.8, color="red", alpha=0.2)
+
+        if pos_to_highlight is not None:
+            pos_to_highlight = np.array(pos_to_highlight)-1
+            plt.scatter(pos_to_highlight, self.es[pos_to_highlight], color='blue', s=50)
+            plt.scatter(pos_to_highlight, self.smoothed_plddt[pos_to_highlight], color='orange', s=50)
+
+        if show_domain:
+            if domains_to_show is None:
+                domains_to_show = self.domains.feature_type.unique()
+            else:
+                domains_to_show = np.array(domains_to_show)
+
+            domains = self.domains.query('feature_type.isin(@domains_to_show)')
+            # highlight domain, color by feature_type
+            cmap = plt.get_cmap("Set3").colors
+            # map feature_type to color
+            feature_type_to_color = {}
+            for i, t in enumerate(domains_to_show):
+                feature_type_to_color[t] = cmap[i]
+
+            y_span = 0.8 / len(domains_to_show)
+
+            for i, domain in domains.query('feature_type.isin(@domains_to_show)').iterrows():
+                idx = np.where(domains_to_show==domain.feature_type)[0][0]
+                plt.axvspan(
+                    domain.feature_begin-1,
+                    domain.feature_end-1,
+                    ymax=idx * y_span + y_span,
+                    ymin=idx * y_span,
+                    color=feature_type_to_color[domain.feature_type],
+                    alpha=0.2,
+                )
+            # add legend of domain color
+            legend_elements = []
+            for i in domains_to_show:
+                legend_elements.append(Patch(facecolor=feature_type_to_color[i], label=i))
+                # reverse the order of legend
+            legend_elements = legend_elements[::-1]
+            # legend outside the plot, append line plot legend in the end
+            legend_elements.append(plt.Line2D([0], [0], color='blue', label='ES'))
+            legend_elements.append(plt.Line2D([0], [0], color='orange', label='pLDDT'))
+            plt.legend(
+                handles=legend_elements,
+                bbox_to_anchor=(1.05, 1, 0.1, 0.1),
+                loc="upper left",
+                borderaxespad=0.0,
+                fontsize=16,
+            )
+        # add number index of low or high plddt region on top of the plot
+        for i, region in enumerate(self.low_or_high_plddt_region):
+            plt.text(region[0], 0.9, f"{i}", fontsize=12)
+
+        plt.title(f"{self.gene_name} pLDDT")
+        plt.xlabel("Residue")
+        plt.ylabel("pLDDT")
+        # set x ticks to start from 1
+        plt.xticks(np.arange(0, self.length, 100), np.arange(1, self.length + 1, 100))
+        plt.tight_layout()
+        if filename is not None:
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
+        return fig, ax

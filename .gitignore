@@ -9,3 +9,8 @@ data/causal_top_pair_per_celltype_df_non_redundant_pair_with_count.csv
 proscope/9606.pLDDT.pickle
 build
 proscope.egg-info
+*ALL_hum_isoforms_ESM1b_LLR/*.csv
+*.fasta
+data/content*
+pairwise_interaction
+*pdb
