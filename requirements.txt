@@ -1,0 +1,10 @@
+matplotlib
+numpy
+pandas
+seaborn
+biopython
+tqdm
+xmlschema
+scipy
+nglview
+py3Dmol
