@@ -424,20 +424,22 @@ class AFPairseg(object):
 
     def plot_plddt_gene1(self):
         fig, ax = plt.subplots(1, 1, figsize=(20, 5))
-        sns.lineplot(
+        sns.pointplot(
             x=range(self.protein1.length),
             y=min_max(self.protein1.plddt),
             ax=ax,
+            markers=",",
             color="black",
             label="monomer",
             alpha=0.5,
             linewidth=10,
         )
-        sns.lineplot(
+        sns.pointplot(
             x="gene1_res",
             y="plddt",
             data=min_max(self.pairs_score["plddt"].query("~gene1_res.isna()")),
             hue="seg2",
+            markers=",",
             palette="tab20",
             ax=ax,
             linewidth=3,
@@ -456,19 +458,21 @@ class AFPairseg(object):
 
     def plot_plddt_gene2(self):
         fig, ax = plt.subplots(1, 1, figsize=(20, 5))
-        sns.lineplot(
+        sns.pointplot(
             x=range(self.protein2.length),
             y=min_max(self.protein2.plddt),
             ax=ax,
+            markers=",",
             color="black",
             label="monomer",
             alpha=0.5,
             linewidth=10,
         )
-        sns.lineplot(
+        sns.pointplot(
             x="gene2_res",
             y="plddt",
             data=min_max(self.pairs_score["plddt"].query("~gene2_res.isna()")),
+            markers=",",
             hue="seg1",
             palette="tab20",
             ax=ax,
