@@ -244,21 +244,10 @@ class AFResult(object):
                 model_type=self.config["model_type"]
             ),
         )
-        self.scores = self._parse_scores()
-        self.interchain_min_pae = np.array(
-            [s.interchain_min_pae for s in self.scores]
-        ).min()
-        self.max_pae = np.array([s.max_pae for s in self.scores]).max()
-        self.min_pae = np.array([s.pae.min() for s in self.scores]).min()
-        self.iptm = np.array([s.iptm for s in self.scores]).max()
-        ptm = np.array([s.ptm for s in self.scores])
-        self.ptm = ptm.max()
-        self.plddt = np.array([s.plddt for s in self.scores]).max(axis=0)
-        self.mean_plddt = np.mean(self.plddt)
-        self.pdb = sorted(glob(self.pdbs))[ptm.argmax()]
+        
         pdockq_max = 0
         ppv_max = 0
-        for f in glob(self.pdbs):
+        for f in sorted(glob(self.pdbs)):
             chain_coords, chain_plddt = read_pdb(f)
             t = 8  # Distance threshold, set to 8 Å
             pdockq, ppv = calc_pdockq(chain_coords, chain_plddt, t)
@@ -269,6 +258,18 @@ class AFResult(object):
         # get chain length from self.pdb
         chain_coords, chain_plddt = read_pdb(self.pdb)
         self.chain_len = [len(chain_coords[c]) for c in chain_coords]
+        self.scores = self._parse_scores()
+        self.interchain_min_pae = np.array(
+            [s.interchain_min_pae for s in self.scores]
+        ).min()
+        self.max_pae = np.array([s.max_pae for s in self.scores]).max()
+        self.min_pae = np.array([s.pae.min() for s in self.scores]).min()
+        self.iptm = np.array([s.iptm for s in self.scores]).max()
+        ptm = np.array([s.ptm for s in self.scores])
+        self.ptm = ptm.max()
+        self.pdb = sorted(glob(self.pdbs))[ptm.argmax()]
+        self.plddt = np.array([s.plddt for s in self.scores]).max(axis=0)
+        self.mean_plddt = np.mean(self.plddt)
         self.pdockq = pdockq_max
         self.ppv = ppv_max
         # self.fasta = self._parse_fasta()
