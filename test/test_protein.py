@@ -1,7 +1,7 @@
 # %%
 import sys
-sys.path.append('/home/xf2217/Projects/proscope/proscope')
-from protein import Protein, generate_pair_sequence
+# sys.path.append('/home/xf2217/Projects/proscope/proscope')
+from proscope.protein import Protein, generate_pair_sequence
 import os
 #%%
 generate_pair_sequence('PAX5', 'RARA', 'test_causal_db/sequences/causal_edges_db/PAX5_RARA')
