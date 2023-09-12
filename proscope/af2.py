@@ -244,7 +244,7 @@ class AFResult(object):
                 model_type=self.config["model_type"]
             ),
         )
-        
+        self.pdb = sorted(glob(self.pdbs))[0]
         pdockq_max = 0
         ppv_max = 0
         for f in sorted(glob(self.pdbs)):
