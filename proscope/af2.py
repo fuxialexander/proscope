@@ -244,7 +244,18 @@ class AFResult(object):
                 model_type=self.config["model_type"]
             ),
         )
-        self.pdb = glob(self.pdbs)[0]
+        self.scores = self._parse_scores()
+        self.interchain_min_pae = np.array(
+            [s.interchain_min_pae for s in self.scores]
+        ).min()
+        self.max_pae = np.array([s.max_pae for s in self.scores]).max()
+        self.min_pae = np.array([s.pae.min() for s in self.scores]).min()
+        self.iptm = np.array([s.iptm for s in self.scores]).max()
+        ptm = np.array([s.ptm for s in self.scores])
+        self.ptm = ptm.max()
+        self.plddt = np.array([s.plddt for s in self.scores]).max(axis=0)
+        self.mean_plddt = np.mean(self.plddt)
+        self.pdb = sorted(glob(self.pdbs))[ptm.argmax()]
         pdockq_max = 0
         ppv_max = 0
         for f in glob(self.pdbs):
@@ -263,15 +274,7 @@ class AFResult(object):
         # self.fasta = self._parse_fasta()
         # self.chains = str(self.fasta.seq).split(':')
         # self.chain_len = [len(c) for c in self.chains]
-        self.scores = self._parse_scores()
-        self.interchain_min_pae = np.array(
-            [s.interchain_min_pae for s in self.scores]
-        ).min()
-        self.max_pae = np.array([s.max_pae for s in self.scores]).max()
-        self.min_pae = np.array([s.pae.min() for s in self.scores]).min()
-        self.iptm = np.array([s.iptm for s in self.scores]).max()
-        self.plddt = np.array([s.plddt for s in self.scores]).max(axis=0)
-        self.mean_plddt = np.mean(self.plddt)
+
 
     def _parse_fasta(self):
         basename = os.path.basename(self.dir)
@@ -303,7 +306,7 @@ class AFResult(object):
                 model_type=self.config["model_type"]
             ),
         )
-        for js_file in glob(file_pattern):
+        for js_file in sorted(glob(file_pattern)):
             scores.append(AFScore(self.chain_len, js_file))
         return scores
 
