@@ -17,7 +17,98 @@ df['pos'] = df['variable'].apply(lambda x: int(x.split(' ')[1]))
 df = df.rename({'value': 'esm'}, axis=1)
 df = df[['variant', 'pos', 'esm']]
 #%%
-a = Protein('PAX5')
+a = Protein('NT5C2')
+#%%
+
+def plotly_plddt_(
+            a,
+            pos_to_highlight=None,
+            to_compare=None,
+            filename=None,
+            show_low_plddt=True,
+            show_domain=True,
+            domains_to_show=["region of interest", "DNA-binding region", "splice variant"]
+    ):
+    # Initialize Plotly Figure
+    fig = go.Figure()
+
+    # Plot main pLDDT line
+    fig.add_trace(go.Scatter(y=a.smoothed_plddt, mode='lines', name='pLDDT', line=dict(color='orange')))
+
+    # Plot secondary comparison line if specified
+    if to_compare is not None:
+        fig.add_trace(go.Scatter(y=to_compare, mode='lines', name='To Compare'))
+
+    # Plot ES if available and no comparison data is specified
+    elif hasattr(a, "es"):
+        fig.add_trace(go.Scatter(y=a.es, mode='lines', name='ES', line=dict(color='blue')))
+
+    # Highlight low pLDDT regions
+    if show_low_plddt:
+        for region in a.low_plddt_region:
+            fig.add_shape(
+                go.layout.Shape(
+                    type="rect",
+                    x0=region[0],
+                    x1=region[1],
+                    y0=0.8,
+                    y1=1,
+                    fillcolor="red",
+                    opacity=0.2,
+                    layer="below"
+                )
+            )
+
+    # Highlight specified positions
+    if pos_to_highlight is not None:
+        pos_to_highlight = np.array(pos_to_highlight) - 1
+        fig.add_trace(go.Scatter(x=pos_to_highlight, y=a.smoothed_plddt[pos_to_highlight], mode='markers', marker=dict(color='orange', size=8)))
+
+        # Show domains if applicable
+        if show_domain:
+            for i, domain in a.domains.iterrows():
+                print(domain.feature_type)
+                if domain.feature_type in domains_to_show:
+                    fig.add_shape(
+                        go.layout.Shape(
+                            type="rect",
+                            x0=domain.feature_begin,
+                            x1=domain.feature_end,
+                            y0=0.8,
+                            y1=1,
+                            fillcolor="grey",
+                            opacity=0.2,
+                            layer="below",
+                        )
+                    )
+                    # Add hover text
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[(domain.feature_begin + domain.feature_end) / 2],
+                            y=[0.9],
+                            text=[domain.feature_type],
+                            mode="text",
+                            hoverinfo="text",
+                            hovertext=[domain.feature_type],
+                            showlegend=False
+                        )
+                    )
+
+    # Additional plot settings
+    fig.update_layout(
+        title=f"{a.gene_name} pLDDT",
+        xaxis_title="Residue",
+        yaxis_title="pLDDT",
+        xaxis=dict(tickvals=np.arange(0, a.length, 100), ticktext=np.arange(1, a.length + 1, 100))
+    )
+
+    # Save figure if filename is provided
+    if filename is not None:
+        fig.write_image(filename)
+
+    return fig
+#%%
+plotly_plddt_(a)
 #%%
 fig, ax = a.plot_plddt(show_domain=True, show_low_plddt=False)
 # add legent

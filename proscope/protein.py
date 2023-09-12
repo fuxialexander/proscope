@@ -450,56 +450,56 @@ class Protein(object):
                 show_domain=True,
                 domains_to_show=["region of interest", "DNA-binding region", "splice variant"]
         ):
-            # Initialize Plotly Figure
-            fig = go.Figure()
+        # Initialize Plotly Figure
+        fig = go.Figure()
 
-            # Plot main pLDDT line
-            fig.add_trace(go.Scatter(y=self.smoothed_plddt, mode='lines', name='pLDDT', line=dict(color='orange')))
+        # Plot main pLDDT line
+        fig.add_trace(go.Scatter(y=self.smoothed_plddt, mode='lines', name='pLDDT', line=dict(color='orange')))
 
-            # Plot secondary comparison line if specified
-            if to_compare is not None:
-                fig.add_trace(go.Scatter(y=to_compare, mode='lines', name='To Compare'))
+        # Plot secondary comparison line if specified
+        if to_compare is not None:
+            fig.add_trace(go.Scatter(y=to_compare, mode='lines', name='To Compare'))
 
-            # Plot ES if available and no comparison data is specified
-            elif hasattr(self, "es"):
-                fig.add_trace(go.Scatter(y=self.es, mode='lines', name='ES', line=dict(color='blue')))
+        # Plot ES if available and no comparison data is specified
+        elif hasattr(self, "es"):
+            fig.add_trace(go.Scatter(y=self.es, mode='lines', name='ES', line=dict(color='blue')))
 
-            # Highlight low pLDDT regions
-            if show_low_plddt:
-                for region in self.low_plddt_region:
-                    fig.add_shape(
-                        go.layout.Shape(
-                            type="rect",
-                            x0=region[0],
-                            x1=region[1],
-                            y0=0.8,
-                            y1=1,
-                            fillcolor="red",
-                            opacity=0.2,
-                            layer="below"
-                        )
+        # Highlight low pLDDT regions
+        if show_low_plddt:
+            for region in self.low_plddt_region:
+                fig.add_shape(
+                    go.layout.Shape(
+                        type="rect",
+                        x0=region[0],
+                        x1=region[1],
+                        y0=0.8,
+                        y1=1,
+                        fillcolor="red",
+                        opacity=0.2,
+                        layer="below"
                     )
+                )
 
-            # Highlight specified positions
-            if pos_to_highlight is not None:
-                pos_to_highlight = np.array(pos_to_highlight) - 1
-                fig.add_trace(go.Scatter(x=pos_to_highlight, y=self.smoothed_plddt[pos_to_highlight], mode='markers', marker=dict(color='orange', size=8)))
+        # Highlight specified positions
+        if pos_to_highlight is not None:
+            pos_to_highlight = np.array(pos_to_highlight) - 1
+            fig.add_trace(go.Scatter(x=pos_to_highlight, y=self.smoothed_plddt[pos_to_highlight], mode='markers', marker=dict(color='orange', size=8)))
 
-            # Show domains if applicable
-            if show_domain:
-                # ... (domain plotting logic, adapted for Plotly)
-                # This part needs to be adapted to your specific domain data structure
+        # Show domains if applicable
+        # if show_domain:
+        #     # ... (domain plotting logic, adapted for Plotly)
+        #     # This part needs to be adapted to your specific domain data structure
 
-            # Additional plot settings
-            fig.update_layout(
-                title=f"{self.gene_name} pLDDT",
-                xaxis_title="Residue",
-                yaxis_title="pLDDT",
-                xaxis=dict(tickvals=np.arange(0, self.length, 100), ticktext=np.arange(1, self.length + 1, 100))
-            )
+        # Additional plot settings
+        fig.update_layout(
+            title=f"{self.gene_name} pLDDT",
+            xaxis_title="Residue",
+            yaxis_title="pLDDT",
+            xaxis=dict(tickvals=np.arange(0, self.length, 100), ticktext=np.arange(1, self.length + 1, 100))
+        )
 
-            # Save figure if filename is provided
-            if filename is not None:
-                fig.write_image(filename)
+        # Save figure if filename is provided
+        if filename is not None:
+            fig.write_image(filename)
 
-            return fig
+        return fig
