@@ -493,7 +493,7 @@ class AFPairseg(object):
         fig, axs = plt.subplots(2, 2, figsize=(12, 12))
         sns.heatmap(
             self.pairs_score["interchain_min_pae"],
-            cmap="Blues",
+            cmap="Blues_r",
             ax=axs[0, 0],
             vmin=0,
             vmax=10,
