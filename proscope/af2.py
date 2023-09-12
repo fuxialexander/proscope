@@ -1,4 +1,3 @@
-# %%
 import json
 import os
 from collections import defaultdict
@@ -10,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 from Bio import SeqIO
 
-from proscope.data import get_seq, get_genename_to_uniprot, get_lddt
+from proscope.data import get_genename_to_uniprot, get_lddt, get_seq
 
 seq = get_seq()
 genename_to_uniprot = get_genename_to_uniprot()
@@ -18,7 +17,6 @@ lddt = get_lddt()
 from proscope.protein import Protein
 
 
-# %%
 def parse_atm_record(line):
     """Get the atm record"""
     record = defaultdict()
@@ -227,7 +225,6 @@ class AFScore(object):
         return np.min(interchain_pae)
 
 
-# %%
 class AFResult(object):
     """AlphaFold result from a files"""
 
@@ -322,7 +319,6 @@ class AFResult(object):
         )
 
 
-# %%
 class AFMonomer(AFResult):
     """An AFResult class for AF2 Monomer prediction"""
 
@@ -338,7 +334,6 @@ class AFMultimer(AFResult):
     """An AFResult class for AF2 Multimer prediction"""
 
 
-# %%
 def min_max(arr):
     """normalize an array to 0-1"""
     if isinstance(arr, np.ndarray):
