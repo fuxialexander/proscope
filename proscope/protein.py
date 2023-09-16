@@ -3,20 +3,26 @@ import os
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.io as pio
 import xmlschema
 from Bio import SeqIO
 from Bio.PDB import PDBParser
 from genericpath import exists
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
-import plotly.graph_objects as go
+from plotly import graph_objects as go
+
+pio.templates.default = "plotly_white"
+import matplotlib.pyplot as plt
+import numpy as np
+
 # gaussian filter
 from scipy.ndimage import gaussian_filter1d
 from tqdm import tqdm
 
 bioparser = PDBParser()
-from proscope.data import (get_genename_to_uniprot, get_lddt, get_schema,
-                           get_seq)
+from proscope.data import get_genename_to_uniprot, get_lddt, get_schema, get_seq
 
 seq = get_seq()
 genename_to_uniprot = get_genename_to_uniprot()
@@ -75,7 +81,7 @@ def extract_pos_from_mut(str):
 class Protein(object):
     """Protein class"""
 
-    def __init__(self, gene_name, homodimer=False, use_es=False):
+    def __init__(self, gene_name, homodimer=False, use_es=False, window_size=10):
         """
         Args:
             gene_name (str): gene name
@@ -87,15 +93,18 @@ class Protein(object):
         self.plddt = lddt[self.uniprot_id]
         self.length = len(self.plddt)
         self.sequence = seq[self.uniprot_id]
-        self.smoothed_plddt_gaussian = self.get_smooth_plddt_gaussian()
+        self.smoothed_plddt_gaussian = self.get_smoothed_plddt_gaussian()
         self.smoothed_plddt = self.get_smooth_plddt()
         self.domains = self.get_domain_from_uniprot()
+        self.window_size = window_size
 
         if use_es:
             self.grad = self.get_plddt_grad()
             self.pairwise_distance = self.get_pairwise_distance(dimer=False)
             self.esm = self.get_esm()
-            self.es = smooth(self.get_final_score_gated_grad_3d())
+            self.es = smooth(
+                self.get_final_score_gated_grad_3d(), window_size=self.window_size
+            )
 
     def get_domain_from_uniprot(self):
         """Get domain information from uniprot"""
@@ -135,7 +144,7 @@ class Protein(object):
         )
         return result / np.max(result)
 
-    def get_smooth_plddt_gaussian(self, sigma=2):
+    def get_smoothed_plddt_gaussian(self, sigma=2):
         result = gaussian_filter1d(self.plddt, sigma=sigma)
         return result / np.max(result)
 
@@ -144,14 +153,18 @@ class Protein(object):
         grad = np.clip(grad, np.quantile(grad, 0.2), np.quantile(grad, 0.8))
         return grad
 
-    def get_esm(self, format="pos"):
+    def get_esm(
+        self,
+        format="pos",
+        esm_folder="/manitou/pmg/users/xf2217/demo_data/esm1b/ALL_hum_isoforms_ESM1b_LLR",
+    ):
         """Use UNIPROT_ID to get ESM score from ESM1b model"""
         # read PAX5 (PAX5) | Q02548.csv
         # variant,score,pos
         # M1K,-8.983,1
         # M1R,-8.712,1
         df = pd.read_csv(
-            f"../data/content/ALL_hum_isoforms_ESM1b_LLR/{self.uniprot_id}_LLR.csv",
+            f"{esm_folder}/{self.uniprot_id}_LLR.csv",
             index_col=0,
         )
         if format == "long":
@@ -278,10 +291,12 @@ class Protein(object):
 
         return f
 
-    def get_pairwise_distance(self, dimer=False):
+    def get_pairwise_distance(
+        self, dimer=False, af2_folder="/manitou/pmg/users/xf2217/demo_data/af2"
+    ):
         if dimer:
             structure = bioparser.get_structure(
-                "homodimer", "dimer_structures/" + self.gene_name + ".pdb"
+                "homodimer", f"{af2_folder}/dimer_structures/" + self.gene_name + ".pdb"
             )
             model = structure[0]
             chain = model["A"]
@@ -304,11 +319,15 @@ class Protein(object):
             )
 
         else:
-            if exists("../pairwise_interaction/" + self.uniprot_id + ".npy"):
+            if exists(f"{af2_folder}/pairwise_interaction/" + self.uniprot_id + ".npy"):
                 distance = np.load(
-                    "../pairwise_interaction/" + self.uniprot_id + ".npy"
+                    f"{af2_folder}/pairwise_interaction/" + self.uniprot_id + ".npy"
                 )
             else:
+                # make sure structures folder exists
+                if not exists(f"{af2_folder}/structures/"):
+                    os.makedirs(f"{af2_folder}/structures/")
+
                 # download pdb file from AFDB to structures/
                 import urllib.request
 
@@ -318,12 +337,18 @@ class Protein(object):
                     + "-F1-model_v4.pdb"
                 )
                 urllib.request.urlretrieve(
-                    url, "../structures/AF-" + self.uniprot_id + "-F1-model_v4.pdb"
+                    url,
+                    f"{af2_folder}/structures/AF-"
+                    + self.uniprot_id
+                    + "-F1-model_v4.pdb",
                 )
 
                 # https://alphafold.ebi.ac.uk/files/AF-Q02548-F1-model_v4.pdb
                 with open(
-                    "../structures/AF-" + self.uniprot_id + "-F1-model_v4.pdb", "r"
+                    f"{af2_folder}/structures/AF-"
+                    + self.uniprot_id
+                    + "-F1-model_v4.pdb",
+                    "r",
                 ) as f:
                     structure = bioparser.get_structure("monomer", f)
 
@@ -342,9 +367,217 @@ class Protein(object):
                             distance[j][i] = d
                         except KeyError:
                             continue
+            # make sure pairwise_interaction folder exists
+            if not exists(f"{af2_folder}/pairwise_interaction/"):
+                os.makedirs(f"{af2_folder}/pairwise_interaction/")
 
-            np.save("../pairwise_interaction/" + self.uniprot_id + ".npy", distance)
+            np.save(
+                f"{af2_folder}/pairwise_interaction/" + self.uniprot_id + ".npy",
+                distance,
+            )
         return distance
+
+    def plotly_plddt(
+        self,
+        pos_to_highlight=None,
+        to_compare=None,
+        filename=None,
+        show_low_plddt=True,
+        show_domain=True,
+        domains_to_show=[
+            "region of interest",
+            "DNA-binding region",
+            "short sequence motif",
+        ],
+    ):
+        # Initialize Plotly Figure
+        fig = go.Figure()
+
+        # Plot main pLDDT line
+        fig.add_trace(
+            go.Scatter(
+                y=self.smoothed_plddt,
+                mode="lines",
+                name="pLDDT",
+                line=dict(color="orange"),
+            )
+        )
+
+        # Plot secondary comparison line if specified
+        if to_compare is not None:
+            fig.add_trace(go.Scatter(y=to_compare, mode="lines", name="To Compare"))
+
+        # Plot ES if available and no comparison data is specified
+        elif hasattr(self, "es"):
+            fig.add_trace(
+                go.Scatter(y=self.es, mode="lines", name="ES", line=dict(color="blue"))
+            )
+
+        # Highlight low pLDDT regions
+        if show_low_plddt:
+            for i, region in enumerate(self.low_or_high_plddt_region):
+                fig.add_shape(
+                    go.layout.Shape(
+                        type="rect",
+                        x0=region[0],
+                        x1=region[1],
+                        y0=0.8,
+                        y1=1,
+                        fillcolor="grey",
+                        opacity=0.2,
+                        layer="below",
+                    )
+                )
+                # add text "Segment_{i} Mean pLDDT: {mean_pLDDT}"
+                fig.add_trace(
+                    go.Scatter(
+                        x=[(region[0] + region[1]) / 2],
+                        y=[0.9],
+                        text=[
+                            f"Segment_{str(i)} Mean pLDDT: {np.mean(self.smoothed_plddt[region[0]:region[1]]):.2f}"
+                        ],
+                        mode="text",
+                        hoverinfo="text",
+                        hovertext=[
+                            f"Segment_{str(i)} Mean pLDDT: {np.mean(self.smoothed_plddt[region[0]:region[1]]):.2f}"
+                        ],
+                        showlegend=False,
+                    )
+                )
+
+        # Highlight specified positions
+        if pos_to_highlight is not None:
+            pos_to_highlight = np.array(pos_to_highlight) - 1
+            fig.add_trace(
+                go.Scatter(
+                    x=pos_to_highlight,
+                    y=self.smoothed_plddt[pos_to_highlight],
+                    mode="markers",
+                    marker=dict(color="orange", size=8),
+                )
+            )
+
+        # Show domains if applicable, color by feature_type
+        if show_domain:
+            # Create a color mapping for each unique feature_type
+            feature_types = domains_to_show
+            # use tab20 color map
+            colormap = plt.get_cmap("Set3").colors
+            colors = colormap[1 : len(feature_types) + 1]
+            # convert to rgb string
+            colors = ["rgb" + str(i) for i in colors]
+            color_mapping = dict(zip(feature_types, colors))
+
+            for i, domain in self.domains.iterrows():
+                print(domain.feature_type)
+                if domain.feature_type in domains_to_show:
+                    # Get the color for this feature_type
+                    color = color_mapping[domain.feature_type]
+
+                    fig.add_shape(
+                        go.layout.Shape(
+                            type="rect",
+                            x0=domain.feature_begin,
+                            x1=domain.feature_end,
+                            y0=0.6,
+                            y1=0.8,
+                            fillcolor=color,  # Use the color for this feature_type
+                            opacity=0.2,
+                            layer="below",
+                        )
+                    )
+
+                    # Add hover text
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[(domain.feature_begin + domain.feature_end) / 2],
+                            y=[0.7],
+                            text=[domain.feature_description],
+                            mode="text",
+                            hoverinfo="text",
+                            hovertext=[domain.feature_description],
+                            showlegend=False,
+                        )
+                    )
+
+        # Additional plot settings
+        fig.update_layout(
+            title=f"{self.gene_name} pLDDT",
+            xaxis_title="Residue",
+            yaxis_title="pLDDT",
+            xaxis=dict(
+                tickvals=np.arange(0, self.length, 100),
+                ticktext=np.arange(1, self.length + 1, 100),
+            ),
+        )
+
+        # Save figure if filename is provided
+        if filename is not None:
+            fig.write_image(filename)
+
+        return fig
+
+    def plot_plddt_manuscript(self, to_compare=None, filename=None):
+        plt.figure(figsize=(12, 3))
+        plt.plot(self.plddt)
+        if to_compare is not None:
+            plt.plot(to_compare)
+        # highlight low plddt region
+        for region in self.low_plddt_region:
+            plt.axvspan(region[0], region[1], ymax=1, ymin=0, color="grey", alpha=0.1)
+
+        # highlight domain, color by feature_type
+        cmap = plt.get_cmap("tab20").colors
+        # map feature_type to color
+        feature_type_to_color = {}
+        self.domains = self.domains.query(
+            '(feature_type=="domain") or (feature_type=="region of interest")'
+        )
+        # for i, t in enumerate(obj.domains.feature_type.unique()):
+        #     feature_type_to_color[t] = cmap[i+5]
+        feature_type_to_color["domain"] = cmap[5]
+        feature_type_to_color["region of interest"] = cmap[6]
+
+        y_span = 0.1  # 0.8/len(obj.domains.feature_type.unique())
+        for i, domain in self.domains.iterrows():
+            idx = np.where(self.domains.feature_type.unique() == domain.feature_type)[
+                0
+            ][0]
+            plt.axvspan(
+                domain.feature_begin,
+                domain.feature_end,
+                ymax=idx * y_span + y_span,
+                ymin=idx * y_span,
+                color=feature_type_to_color[domain.feature_type],
+                alpha=0.2,
+            )
+        # add legend of domain color
+        legend_elements = []
+        for i in self.domains.feature_type.unique():
+            legend_elements.append(Patch(facecolor=feature_type_to_color[i], label=i))
+            # reverse the order of legend
+        legend_elements = legend_elements[::-1]
+        # add "low plddt region" to legend
+        legend_elements.append(Patch(facecolor="grey", label="low pLDDT region"))
+        # add number index of low or high plddt region on top of the plot
+        # for i, region in enumerate(obj.low_or_high_plddt_region):
+        #     plt.text(region[0], 0.9, f"{i}", fontsize=12)
+        # legend outside the plot
+        plt.legend(
+            handles=legend_elements,
+            bbox_to_anchor=(1.05, 1),
+            loc="upper left",
+            borderaxespad=0.0,
+        )
+        plt.ylabel(f"{self.gene_name} pLDDT")
+        plt.xlabel("Residue")
+        # set xlim to the length of protein
+        plt.xlim(0, len(self.plddt))
+        # plt.ylabel("pLDDT")
+        # plt.tight_layout()
+        if filename is not None:
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
+        plt.show()
 
     def plot_plddt(
         self,
@@ -440,66 +673,3 @@ class Protein(object):
         if filename is not None:
             plt.savefig(filename, dpi=300, bbox_inches="tight")
         return fig, ax
-
-    def plotly_plddt(
-                self,
-                pos_to_highlight=None,
-                to_compare=None,
-                filename=None,
-                show_low_plddt=True,
-                show_domain=True,
-                domains_to_show=["region of interest", "DNA-binding region", "splice variant"]
-        ):
-        # Initialize Plotly Figure
-        fig = go.Figure()
-
-        # Plot main pLDDT line
-        fig.add_trace(go.Scatter(y=self.smoothed_plddt, mode='lines', name='pLDDT', line=dict(color='orange')))
-
-        # Plot secondary comparison line if specified
-        if to_compare is not None:
-            fig.add_trace(go.Scatter(y=to_compare, mode='lines', name='To Compare'))
-
-        # Plot ES if available and no comparison data is specified
-        elif hasattr(self, "es"):
-            fig.add_trace(go.Scatter(y=self.es, mode='lines', name='ES', line=dict(color='blue')))
-
-        # Highlight low pLDDT regions
-        if show_low_plddt:
-            for region in self.low_plddt_region:
-                fig.add_shape(
-                    go.layout.Shape(
-                        type="rect",
-                        x0=region[0],
-                        x1=region[1],
-                        y0=0.8,
-                        y1=1,
-                        fillcolor="red",
-                        opacity=0.2,
-                        layer="below"
-                    )
-                )
-
-        # Highlight specified positions
-        if pos_to_highlight is not None:
-            pos_to_highlight = np.array(pos_to_highlight) - 1
-            fig.add_trace(go.Scatter(x=pos_to_highlight, y=self.smoothed_plddt[pos_to_highlight], mode='markers', marker=dict(color='orange', size=8)))
-
-        # Show domains if applicable
-        # if show_domain:
-        #     # ... (domain plotting logic, adapted for Plotly)
-        #     # This part needs to be adapted to your specific domain data structure
-
-        # Additional plot settings
-        fig.update_layout(
-            title=f"{self.gene_name} pLDDT",
-            xaxis_title="Residue",
-            yaxis_title="pLDDT",
-            xaxis=dict(tickvals=np.arange(0, self.length, 100), ticktext=np.arange(1, self.length + 1, 100))
-        )
-
-        # Save figure if filename is provided
-        if filename is not None:
-            fig.write_image(filename)
-
-        return fig
