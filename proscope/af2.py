@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 from Bio import SeqIO
 
-from atac_rna_data_processing.s3_utils import *
+from atac_rna_data_processing.io.s3_utils import *
 from proscope.data import get_genename_to_uniprot, get_lddt, get_seq
 
 seq = get_seq()
@@ -39,11 +39,11 @@ def parse_atm_record(line):
     return record
 
 
-def read_pdb(pdbfile):
-    """Read a pdb file predicted with AF and rewritten to conatin all chains"""
+def read_pdb(pdbfile, s3_file_sys=None):
+    """Read a pdb file predicted with AF and rewritten to contain all chains"""
 
     chain_coords, chain_plddt = {}, {}
-    with open(pdbfile, "r") as file:
+    with open_file_with_s3(pdbfile, "r", s3_file_sys=s3_file_sys) as file:
         for line in file:
             if not line.startswith("ATOM"):
                 continue
@@ -189,8 +189,8 @@ def calc_pdockq(chain_coords, chain_plddt, t):
 class AFScore(object):
     """AlphaFold scores"""
 
-    def __init__(self, chain_len, js_file) -> None:
-        with open(js_file) as f:
+    def __init__(self, chain_len, js_file, s3_file_sys=None) -> None:
+        with open_file_with_s3(js_file, s3_file_sys=s3_file_sys) as f:
             score = json.load(f)
         js_file = os.path.basename(js_file)
         self.name = js_file.split("scores")[0]
@@ -232,9 +232,9 @@ class AFResult(object):
     def __init__(self, result_dir, fasta_path, s3_file_sys=None) -> None:
         self.dir = result_dir
         self.fasta_path = fasta_path
-        self.fasta = self._parse_fasta()
         self.s3_file_sys = s3_file_sys
-
+        self.fasta = self._parse_fasta()
+        
         self.name = self.fasta.id
         self.config = self._parse_config()
         self.pae = self._parse_pae()
@@ -246,11 +246,11 @@ class AFResult(object):
                 model_type=self.config["model_type"]
             ),
         )
-        self.pdb = sorted(glob_with_s3(self.pdbs, s3_file_sys=s3_file_sys))[0]
+        self.pdb = sorted(glob_with_s3(self.pdbs, s3_file_sys=self.s3_file_sys))[0]
         pdockq_max = 0
         ppv_max = 0
-        for f in sorted(glob_with_s3(self.pdbs, s3_file_sys=s3_file_sys)):
-            chain_coords, chain_plddt = read_pdb(f)
+        for f in sorted(glob_with_s3(self.pdbs, s3_file_sys=self.s3_file_sys)):
+            chain_coords, chain_plddt = read_pdb(f, s3_file_sys=self.s3_file_sys)
             t = 8  # Distance threshold, set to 8 Å
             pdockq, ppv = calc_pdockq(chain_coords, chain_plddt, t)
             if pdockq > pdockq_max:
@@ -258,7 +258,7 @@ class AFResult(object):
                 ppv_max = ppv
                 self.pdb = f
         # get chain length from self.pdb
-        chain_coords, chain_plddt = read_pdb(self.pdb)
+        chain_coords, chain_plddt = read_pdb(self.pdb, s3_file_sys=self.s3_file_sys)
         self.chain_len = [len(chain_coords[c]) for c in chain_coords]
         self.scores = self._parse_scores()
         self.interchain_min_pae = np.array(
@@ -278,24 +278,28 @@ class AFResult(object):
         # self.chains = str(self.fasta.seq).split(':')
         # self.chain_len = [len(c) for c in self.chains]
 
-
     def _parse_fasta(self):
         basename = os.path.basename(self.dir)
-        if path_exists_with_s3(self.fasta_path):
-            fasta = SeqIO.read(self.fasta_path, "fasta")
+        if path_exists_with_s3(self.fasta_path, s3_file_sys=self.s3_file_sys):
+            if self.s3_file_sys:
+                with self.s3_file_sys.open(self.fasta_path, "r") as f:
+                    fasta = SeqIO.read(f, "fasta")
+            else:
+                fasta = SeqIO.read(self.fasta_path, "fasta")
         else:
             gene_seq = seq[genename_to_uniprot[basename]]
             fasta = SeqIO.SeqRecord(seq=gene_seq + ":" + gene_seq, id=basename)
         return fasta
 
     def _parse_config(self):
-        with open(os.path.join(self.dir, "config.json")) as f:
+        with open_file_with_s3(os.path.join(self.dir, "config.json"), s3_file_sys=self.s3_file_sys) as f:
             config = json.load(f)
         return config
 
     def _parse_pae(self):
-        with open(
-            os.path.join(self.dir, self.name + "_predicted_aligned_error_v1.json")
+        with open_file_with_s3(
+            os.path.join(self.dir, self.name + "_predicted_aligned_error_v1.json"),
+            s3_file_sys=self.s3_file_sys
         ) as f:
             pae = json.load(f)
         return np.array(pae["predicted_aligned_error"])
@@ -310,7 +314,7 @@ class AFResult(object):
             ),
         )
         for js_file in sorted(glob_with_s3(file_pattern, s3_file_sys=self.s3_file_sys)):
-            scores.append(AFScore(self.chain_len, js_file))
+            scores.append(AFScore(self.chain_len, js_file, s3_file_sys=self.s3_file_sys))
         return scores
 
     def __repr__(self) -> str:
@@ -533,5 +537,5 @@ class GETAFPairseg(AFPairseg):
         super().__init__(
             results_root_dir,
             fasta_root_dir,
-            config
+            s3_file_sys
         )

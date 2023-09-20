@@ -3,17 +3,19 @@
 import nglview as nv
 import py3Dmol
 
+from atac_rna_data_processing.io.s3_utils import open_file_with_s3
+
 def view_pdb_ipython(pdb_path):
     view = nv.NGLWidget()
     view.add_component(nv.FileStructure(pdb_path))
     # view.update_cartoon(color='red', component=0)
     return view
 
-def view_pdb_html(path_to_pdb):
+def view_pdb_html(path_to_pdb, s3_file_sys=None):
     '''
         #function to display pdb in py3dmol
     '''
-    pdb = open(path_to_pdb, "r").read()
+    pdb = open_file_with_s3(path_to_pdb, "r", s3_file_sys=s3_file_sys).read()
     
     view = py3Dmol.view(width=500, height=500)
     view.addModel(pdb, "pdb")
