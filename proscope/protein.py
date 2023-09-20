@@ -93,7 +93,10 @@ def extract_pos_from_mut(str):
 class Protein(object):
     """Protein class"""
 
-    def __init__(self, gene_name, homodimer=False, use_es=False, window_size=10):
+    def __init__(self, gene_name, homodimer=False, use_es=False, 
+                 esm_folder = "/manitou/pmg/users/xf2217/demo_data/esm1b/esm1b_t33_650M_UR90S_1",
+                af2_folder = "/manitou/pmg/users/xf2217/demo_data/af2",
+                 window_size=10):
         """
         Args:
             gene_name (str): gene name
@@ -109,10 +112,12 @@ class Protein(object):
         self.smoothed_plddt = self.get_smooth_plddt()
         self.domains = self.get_domain_from_uniprot()
         self.window_size = window_size
+        self.esm_folder = esm_folder
+        self.af2_folder = af2_folder
 
         if use_es:
             self.grad = self.get_plddt_grad()
-            self.pairwise_distance = self.get_pairwise_distance(dimer=False)
+            self.pairwise_distance = self.get_pairwise_distance(dimer=False, af2_folder=self.af2_folder)
             self.esm = self.get_esm()
             self.es = smooth(
                 self.get_final_score_gated_grad_3d(), window_size=self.window_size
@@ -168,7 +173,6 @@ class Protein(object):
     def get_esm(
         self,
         format="pos",
-        esm_folder="/manitou/pmg/users/xf2217/demo_data/esm1b/ALL_hum_isoforms_ESM1b_LLR",
     ):
         """Use UNIPROT_ID to get ESM score from ESM1b model"""
         # read PAX5 (PAX5) | Q02548.csv
@@ -176,7 +180,7 @@ class Protein(object):
         # M1K,-8.983,1
         # M1R,-8.712,1
         df = pd.read_csv(
-            f"{esm_folder}/{self.uniprot_id}_LLR.csv",
+            f"{self.esm_folder}/{self.uniprot_id}_LLR.csv",
             index_col=0,
         )
         if format == "long":
@@ -484,7 +488,18 @@ class Protein(object):
 
         # Plot secondary comparison line if specified
         if to_compare is not None:
-            fig.add_trace(go.Scatter(y=to_compare, mode="lines", name="To Compare"))
+            if isinstance(to_compare, dict):
+                for name, (color, data)  in to_compare.items():
+                    fig.add_trace(
+                        go.Scatter(
+                            y=data,
+                            mode="lines",
+                            name=name,
+                            line=dict(color=color),
+                        )
+                    )
+            else:
+                fig.add_trace(go.Scatter(y=to_compare, mode="lines", name="To Compare"))
 
         # Plot ES if available and no comparison data is specified
         elif hasattr(self, "es"):

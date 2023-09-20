@@ -14,3 +14,7 @@ proscope.egg-info
 data/content*
 pairwise_interaction
 *pdb
+test/all_gene_values.npy
+test/all_gene_dfs.feather
+test/AlphaMissense_aa_substitutions.tsv.gz
+test/AlphaMissense_aa_substitutions.feather
