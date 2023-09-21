@@ -1,4 +1,5 @@
 # An insilico microscope of proteins
+Proscope is a toolbox for examine proteins, developed by Xi Fu in [Rabadan Lab, Program of Mathematical Genomics, Columbia University](https://www.rabadanlab.org)
 
 ## Installation
 ```bash
