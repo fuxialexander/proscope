@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from Bio import SeqIO
+from plotly import graph_objects as go
+import plotly.express as px
 
 from atac_rna_data_processing.io.s3_utils import *
 from proscope.data import get_genename_to_uniprot, get_lddt, get_seq
@@ -498,6 +500,70 @@ class AFPairseg(object):
         ax.set_ylabel("pLDDT")
         plt.tight_layout()
         return fig, ax
+
+    def plotly_plddt_gene1(self):
+        # First, get the Plotly figure object from the existing plotly_plddt method
+        fig = self.protein1.plotly_plddt()  # Assume other necessary arguments are passed
+
+        # Prepare additional scatterplot data
+        # Assume self.pairs_score["plddt"].query("~gene1_res.isna()") is available as df
+        df = self.pairs_score["plddt"].query("~gene1_res.isna()")
+        df['plddt'] = df['plddt'].values/100
+        df = df.sort_values(by=['gene1_res'])
+
+        px_fig = px.line(df,
+                        x='gene1_res',
+                        y='plddt',
+                        color='seg2',
+                        markers=False,
+                        category_orders = {'seg2': sorted(df['seg2'].unique())},
+                        title="Interaction pLDDT").update_traces(connectgaps=False, legendgroup='Multimer pLDDT', legendgrouptitle_text="Multimer pLDDT")
+
+        # Extract traces from px_fig and add them to the original figure
+        for trace in px_fig['data']:
+            fig.add_trace(trace)
+
+        # Update the layout if needed
+        fig.update_layout(
+            title=f"{self.protein1.gene_name} pLDDT plot",
+            font=dict(
+                family="Arial",
+            )
+        )
+        # Show or save the figure
+        fig.show()
+
+    def plotly_plddt_gene2(self):
+        # First, get the Plotly figure object from the existing plotly_plddt method
+        fig = self.protein2.plotly_plddt()  # Assume other necessary arguments are passed
+
+        # Prepare additional scatterplot data
+        # Assume self.pairs_score["plddt"].query("~gene1_res.isna()") is available as df
+        df = self.pairs_score["plddt"].query("~gene2_res.isna()")
+        df['plddt'] = df['plddt'].values/100
+        df = df.sort_values(by=['gene2_res'])
+        
+        px_fig = px.line(df,
+                        x='gene2_res',
+                        y='plddt',
+                        color='seg1',
+                        markers=False,
+                        category_orders = {'seg1': sorted(df['seg1'].unique())},
+                        title="Interaction pLDDT").update_traces(connectgaps=False, legendgroup='Multimer pLDDT', legendgrouptitle_text="Multimer pLDDT")
+
+        # Extract traces from px_fig and add them to the original figure
+        for trace in px_fig['data']:
+            fig.add_trace(trace)
+
+        # Update the layout if needed
+        fig.update_layout(
+            title=f"{self.protein2.gene_name} pLDDT plot",
+            font=dict(
+                family="Arial",
+            )
+        )
+        # Show or save the figure
+        fig.show()
 
     def plot_score_heatmap(self):
         fig, axs = plt.subplots(2, 2, figsize=(12, 12))

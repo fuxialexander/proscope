@@ -46,6 +46,18 @@ def generate_pair_sequence(P1, P2, output_dir):
                 )
 
 
+def min_max(arr):
+    """normalize an array to 0-1"""
+    if isinstance(arr, np.ndarray):
+        return (arr - arr.min()) / (arr.max() - arr.min())
+    elif isinstance(arr, list):
+        return [(a - min(arr)) / (max(arr) - min(arr)) for a in arr]
+    elif isinstance(arr, pd.DataFrame):
+        arr_copy = arr.copy()
+        arr_copy['plddt'] = (arr_copy['plddt'] - arr_copy['plddt'].min()) / (arr_copy['plddt'].max() - arr_copy['plddt'].min())
+        return arr_copy
+
+
 def normalize(x):
     new_x = x - x.min()
     return new_x / new_x.max()
@@ -396,6 +408,7 @@ class Protein(object):
         # Highlight low pLDDT regions
         if show_low_plddt:
             for i, region in enumerate(self.low_or_high_plddt_region):
+                segment_name = f"{self.gene_name}_{str(i)} pLDDT={np.mean(self.smoothed_plddt[region[0]:region[1]]):.2f}"
                 fig.add_trace(
                         go.Scatter(
                             x=[region[0], region[1], region[1], region[0]],
@@ -405,12 +418,12 @@ class Protein(object):
                             opacity=0.2,
                             line=dict(color='black'),
                             hoverinfo='text',
-                            hovertext=[f"{self.gene_name}_{str(i)} Mean pLDDT: {np.mean(self.smoothed_plddt[region[0]:region[1]]):.2f}"],
+                            hovertext=[segment_name],
                             mode='lines',
                             showlegend=True,
                             legendgroup="pLDDT Segments",
                             legendgrouptitle=dict(text="pLDDT Segments"),
-                            name=f"Segment_{str(i)}"
+                            name=segment_name
                         )
                     )
         # Highlight specified positions
@@ -488,6 +501,9 @@ class Protein(object):
                 tickvals=np.arange(0, self.length, 100),
                 ticktext=np.arange(1, self.length + 1, 100),
             ),
+            font=dict(
+                family="Arial",
+            )
         )
 
         # Save figure if filename is provided
