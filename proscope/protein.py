@@ -393,6 +393,72 @@ class Protein(object):
         # Initialize Plotly Figure
         fig = go.Figure()
 
+        # Highlight low pLDDT regions
+        if show_low_plddt:
+            for i, region in enumerate(self.low_or_high_plddt_region):
+                fig.add_trace(
+                        go.Scatter(
+                            x=[region[0], region[1], region[1], region[0]],
+                            y=[0.8, 0.8, 1, 1],
+                            fill='toself',
+                            fillcolor='grey',
+                            opacity=0.2,
+                            line=dict(color='black'),
+                            hoverinfo='text',
+                            hovertext=[f"{self.gene_name}_{str(i)} Mean pLDDT: {np.mean(self.smoothed_plddt[region[0]:region[1]]):.2f}"],
+                            mode='lines',
+                            showlegend=True,
+                            legendgroup="pLDDT Segments",
+                            legendgrouptitle=dict(text="pLDDT Segments"),
+                            name=f"Segment_{str(i)}"
+                        )
+                    )
+        # Highlight specified positions
+        if pos_to_highlight is not None:
+            pos_to_highlight = np.array(pos_to_highlight) - 1
+            fig.add_trace(
+                go.Scatter(
+                    x=pos_to_highlight,
+                    y=self.smoothed_plddt[pos_to_highlight],
+                    mode="markers",
+                    marker=dict(color="orange", size=8),
+                )
+            )
+
+        # Show domains if applicable, color by feature_type
+        if show_domain:
+            # Create a color mapping for each unique feature_type
+            feature_types = self.domains.query('feature_type.isin(@domains_to_show)').feature_description.unique()
+            # use tab20 color map
+            colormap = plt.get_cmap("Set3").colors
+            colors = colormap[1 : len(feature_types) + 1]
+            # convert to rgb string
+            colors = ["rgb" + str(i) for i in colors]
+            color_mapping = dict(zip(feature_types, colors))
+
+            for i, domain in self.domains.iterrows():
+                if domain.feature_type in domains_to_show:
+                    # Get the color for this feature_type
+                    color = color_mapping[domain.feature_description]
+                    # Add domain feature as filled rectangle
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[domain.feature_begin, domain.feature_end, domain.feature_end, domain.feature_begin],
+                            y=[0.6, 0.6, 0.8, 0.8],
+                            fill='toself',
+                            fillcolor=color,
+                            opacity=0.2,
+                            line=dict(color=color),
+                            hoverinfo='text',
+                            hovertext=[domain.feature_description],
+                            mode='lines',
+                            showlegend=True,
+                            legendgroup=domain.feature_type,
+                            legendgrouptitle=dict(text=domain.feature_type),
+                            name=domain.feature_description
+                        )
+                    )
+
         # Plot main pLDDT line
         fig.add_trace(
             go.Scatter(
@@ -412,93 +478,6 @@ class Protein(object):
             fig.add_trace(
                 go.Scatter(y=self.es, mode="lines", name="ES", line=dict(color="blue"))
             )
-
-        # Highlight low pLDDT regions
-        if show_low_plddt:
-            for i, region in enumerate(self.low_or_high_plddt_region):
-                fig.add_shape(
-                    go.layout.Shape(
-                        type="rect",
-                        x0=region[0],
-                        x1=region[1],
-                        y0=0.8,
-                        y1=1,
-                        fillcolor="grey",
-                        opacity=0.2,
-                        layer="below",
-                    )
-                )
-                # add text "Segment_{i} Mean pLDDT: {mean_pLDDT}"
-                fig.add_trace(
-                    go.Scatter(
-                        x=[(region[0] + region[1]) / 2],
-                        y=[0.9],
-                        text=[
-                            f"Segment_{str(i)} Mean pLDDT: {np.mean(self.smoothed_plddt[region[0]:region[1]]):.2f}"
-                        ],
-                        mode="text",
-                        hoverinfo="text",
-                        hovertext=[
-                            f"Segment_{str(i)} Mean pLDDT: {np.mean(self.smoothed_plddt[region[0]:region[1]]):.2f}"
-                        ],
-                        showlegend=False,
-                    )
-                )
-
-        # Highlight specified positions
-        if pos_to_highlight is not None:
-            pos_to_highlight = np.array(pos_to_highlight) - 1
-            fig.add_trace(
-                go.Scatter(
-                    x=pos_to_highlight,
-                    y=self.smoothed_plddt[pos_to_highlight],
-                    mode="markers",
-                    marker=dict(color="orange", size=8),
-                )
-            )
-
-        # Show domains if applicable, color by feature_type
-        if show_domain:
-            # Create a color mapping for each unique feature_type
-            feature_types = domains_to_show
-            # use tab20 color map
-            colormap = plt.get_cmap("Set3").colors
-            colors = colormap[1 : len(feature_types) + 1]
-            # convert to rgb string
-            colors = ["rgb" + str(i) for i in colors]
-            color_mapping = dict(zip(feature_types, colors))
-
-            for i, domain in self.domains.iterrows():
-                print(domain.feature_type)
-                if domain.feature_type in domains_to_show:
-                    # Get the color for this feature_type
-                    color = color_mapping[domain.feature_type]
-
-                    fig.add_shape(
-                        go.layout.Shape(
-                            type="rect",
-                            x0=domain.feature_begin,
-                            x1=domain.feature_end,
-                            y0=0.6,
-                            y1=0.8,
-                            fillcolor=color,  # Use the color for this feature_type
-                            opacity=0.2,
-                            layer="below",
-                        )
-                    )
-
-                    # Add hover text
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[(domain.feature_begin + domain.feature_end) / 2],
-                            y=[0.7],
-                            text=[domain.feature_description],
-                            mode="text",
-                            hoverinfo="text",
-                            hovertext=[domain.feature_description],
-                            showlegend=False,
-                        )
-                    )
 
         # Additional plot settings
         fig.update_layout(
