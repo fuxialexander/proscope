@@ -3,32 +3,23 @@ from proscope.protein import Protein
 import pandas as pd 
 import numpy as np
 
-a = Protein('PAX5', window_size=10, use_es = True, af2_folder='./', esm_folder='~/Projects/proscope/data/content/ALL_hum_isoforms_ESM1b_LLR')
+a = Protein('TP53', window_size=10, use_es = True, af2_folder='./', esm_folder='~/Projects/esm/examples/variant-prediction/output_cancer_genes')
 #%%
-esm1v = pd.read_feather("./all_gene_dfs.feather")
-# %%
-PAX5 = esm1v.query('Gene == "PAX5"')
-# %%
-# PAX5 to wide df
-PAX5['pos'] = PAX5['Mutation'].str[1:-1].astype(int)
-PAX5['aa'] = PAX5['Mutation'].str[-1]
-PAX5_wide = PAX5.pivot(index='pos', columns='aa', values='esm1v_t33_650M_UR90S_1')
-# %%
 afmis = pd.read_feather("./AlphaMissense_aa_substitutions.feather")
-PAX5_af = afmis.query('uniprot_id==@a.uniprot_id')
-PAX5_af['pos'] = PAX5_af['protein_variant'].str[1:-1].astype(int)
-PAX5_af['aa'] = PAX5_af['protein_variant'].str[-1]
-PAX5_af_wide = PAX5_af.pivot(index='pos', columns='aa', values='am_pathogenicity')
 #%%
-to_compare = {'AFMissense': ('lime', PAX5_af_wide.mean(1).values), 
-              'ESM1v': ('purple', PAX5_wide.mean(1).values/PAX5_wide.mean(1).values.min()),
-              'ESM1b': ('lightpink', a.esm),
-            #   'pLDDT_original': ('blue', a.plddt/100),
-              'ES': ('green', a.es)
+af_g = afmis.query('uniprot_id==@a.uniprot_id')
+af_g['pos'] = af_g['protein_variant'].str[1:-1].astype(int)
+af_g['aa'] = af_g['protein_variant'].str[-1]
+af_g_wide = af_g.pivot(index='pos', columns='aa', values='am_pathogenicity')
+#%%
+from proscope.protein import smooth
+to_compare = {'AFMissense': ('lime', smooth(af_g_wide.mean(1).values/af_g_wide.mean(1).values.max(), 10)), 
+              # 'ESM1b': ('lightpink', a.esm),
+              # 'pLDDT_original': ('blue', a.plddt/100),
+              'ES': ('green', a.es_raw)
               }
 # %%
-a.plotly_plddt(to_compare=to_compare)
+a.plotly_plddt(to_compare=to_compare, domains_to_show=['DNA-binding region'])
 
-# %%
-a.plot_plddt_manuscript()
-# %%
+
+# %%z

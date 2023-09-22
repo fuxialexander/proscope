@@ -29,6 +29,14 @@ genename_to_uniprot = get_genename_to_uniprot()
 lddt = get_lddt()
 schema = get_schema()
 
+def extract_wt_from_mut(str):
+    return str[0:1]
+
+def extract_alt_from_mut(str):
+    return str[-1:]
+
+def extract_pos_from_mut(str):
+    return int(str[1:-1])
 
 def generate_pair_sequence(P1, P2, output_dir):
     """generate pair sequence from row"""
@@ -108,7 +116,7 @@ class Protein(object):
         self.plddt = lddt[self.uniprot_id]
         self.length = len(self.plddt)
         self.sequence = seq[self.uniprot_id]
-        self.smoothed_plddt_gaussian = self.get_smoothed_plddt_gaussian()
+        self.smoothed_plddt_gaussian = self.get_smoothed_plddt_gaussian(sigma=window_size//2)
         self.smoothed_plddt = self.get_smooth_plddt()
         self.domains = self.get_domain_from_uniprot()
         self.window_size = window_size
@@ -119,9 +127,8 @@ class Protein(object):
             self.grad = self.get_plddt_grad()
             self.pairwise_distance = self.get_pairwise_distance(dimer=False, af2_folder=self.af2_folder)
             self.esm = self.get_esm()
-            self.es = smooth(
-                self.get_final_score_gated_grad_3d(), window_size=self.window_size
-            )
+            self.es_raw = self.get_final_score_gated_grad_3d()
+            
 
     def get_domain_from_uniprot(self):
         """Get domain information from uniprot"""
@@ -179,24 +186,31 @@ class Protein(object):
         # variant,score,pos
         # M1K,-8.983,1
         # M1R,-8.712,1
-        df = pd.read_csv(
-            f"{self.esm_folder}/{self.uniprot_id}_LLR.csv",
-            index_col=0,
-        )
-        if format == "long":
-            # melt to long format, column, row, value
-            df = df.reset_index().melt(id_vars="index")
-            df["variant"] = df["variable"].str.replace(" ", "") + df["index"].astype(
-                str
-            )
-            df["pos"] = df["variable"].apply(lambda x: int(x.split(" ")[1]))
-            df = df.rename({"value": "esm"}, axis=1)
-            df = df[["variant", "pos", "esm"]]
-            return df
-        elif format == "wide":
-            return df
-        elif format == "pos":
-            return normalize(-df.mean(0).values)
+        # df = pd.read_csv(
+        #     f"{self.esm_folder}/{self.uniprot_id}_LLR.csv",
+        #     index_col=0,
+        # )
+        # if format == "long":
+        #     # melt to long format, column, row, value
+        #     df = df.reset_index().melt(id_vars="index")
+        #     df["variant"] = df["variable"].str.replace(" ", "") + df["index"].astype(
+        #         str
+        #     )
+        #     df["pos"] = df["variable"].apply(lambda x: int(x.split(" ")[1]))
+        #     df = df.rename({"value": "esm"}, axis=1)
+        #     df = df[["variant", "pos", "esm"]]
+        #     return df
+        # elif format == "wide":
+        #     return df
+        # elif format == "pos":
+        #     return normalize(-df.mean(0).values)
+        esm = pd.read_csv(f"{self.esm_folder}/{self.gene_name}.csv.gz", index_col=0)
+        esm['esm'] = esm.iloc[:,3:].astype(float).mean(axis=1)
+        esm['ALT'] = esm.Mutation.apply(extract_alt_from_mut)
+        esm['REF'] = esm.Mutation.apply(extract_wt_from_mut)
+        esm['Amino acid position'] = esm.Mutation.apply(extract_pos_from_mut)
+        esm = esm[['esm', 'ALT', 'Amino acid position']].pivot_table(index='ALT', columns='Amino acid position', values='esm').fillna(0)
+        return normalize(-esm.mean(0).values)
         # df['ALT'] = df.variant.apply(extract_alt_from_mut)
         # df['REF'] = df.variant.apply(extract_wt_from_mut)
         # df['esm'] = df['esm'].astype(float)
@@ -298,13 +312,13 @@ class Protein(object):
             sequences.append(s)
         return sequences
 
-    def get_final_score_gated_grad_3d(self, interaction_threshold=20):
+    def get_final_score_gated_grad_3d(self, interaction_threshold=15):
         f = self.grad * self.esm
         pairwise_interaction = self.pairwise_distance < interaction_threshold
-        f[(self.smoothed_plddt < 0.5)] = 0
+        # f[(self.smoothed_plddt < 0.5)] = 0
         f = get_3d_avg(f, pairwise_interaction)
         f = normalize(f)
-
+        f = smooth(f, window_size=self.window_size)
         return f
 
     def get_pairwise_distance(
@@ -405,6 +419,7 @@ class Protein(object):
             "DNA-binding region",
             "short sequence motif",
         ],
+        log_scale=False,
     ):
         # Initialize Plotly Figure
         fig = go.Figure()
@@ -525,6 +540,8 @@ class Protein(object):
         if filename is not None:
             fig.write_image(filename)
 
+        if log_scale:
+            fig.update_yaxes(type="log")
         return fig
 
     def plot_plddt_manuscript(self, to_compare=None, filename=None):
