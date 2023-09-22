@@ -530,8 +530,7 @@ class AFPairseg(object):
                 family="Arial",
             )
         )
-        # Show or save the figure
-        fig.show()
+        return fig
 
     def plotly_plddt_gene2(self):
         # First, get the Plotly figure object from the existing plotly_plddt method
@@ -562,8 +561,8 @@ class AFPairseg(object):
                 family="Arial",
             )
         )
-        # Show or save the figure
-        fig.show()
+        return fig
+
 
     def plot_score_heatmap(self):
         fig, axs = plt.subplots(2, 2, figsize=(12, 12))
