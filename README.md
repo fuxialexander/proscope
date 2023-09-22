@@ -13,3 +13,8 @@ Usage example can be found in test folder.
 
 # Protein domain visualization
 ![myc protein](data/myc_protein_plot.png)
+
+# ES Score
+To plot ES score for any human reference protein, use this Jupyter notebook.
+https://colab.research.google.com/github/fuxialexander/proscope/blob/master/ES_Score.ipynb
+
