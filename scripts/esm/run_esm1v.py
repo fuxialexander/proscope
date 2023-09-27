@@ -342,9 +342,7 @@ if __name__ == "__main__":
         models.append((model, batch_converter, alphabet, model_location))
 
     all_gene_dfs = []
-    for idx, i in tqdm(enumerate(genes)):
-        if idx > 3:
-            break
+    for i in tqdm(genes):
         if args.fasta:
             df = get_gene_with_fasta(i, args.fasta, models)
         else:

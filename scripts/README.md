@@ -15,7 +15,7 @@ Once the models and mapping are downloaded, run predictions for each model with 
 3. `[model_dir]` points to the directory containing the five ESM models downloaded in the previous step.
 4. Specify an `[output_dir]` where the results will be saved.
 
-This script runs [./esm/run_esm1v.py](./esm/run_esm1v.py) for each model, which executes a saturated mutagenesis on each amino acid sequence corresponding to the provided genes. The provided ESM-1v model scores each generated sequence. The output is a feather file containing the scores for each possible mutation for all genes. 
+This script runs [run_esm1v.py](./esm/run_esm1v.py) for each model, which executes a saturated mutagenesis on each amino acid sequence corresponding to the provided genes. The provided ESM-1v model scores each generated sequence. The output is a feather file containing the scores for each possible mutation for all genes. 
 
 ## ColabFold
 
