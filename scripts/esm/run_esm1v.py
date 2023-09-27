@@ -134,7 +134,6 @@ def read_msa(filename: str, nseq: int) -> List[Tuple[str, str]]:
     return msa
 
 def label_row(row, sequence, token_probs, alphabet, offset_idx):
-    breakpoint()
     wt, idx, mt = row[0], int(row[1:-1]) - offset_idx, row[-1]
     assert sequence[idx] == wt, "The listed wildtype does not match the provided sequence:" + sequence[idx] + str(idx) + "-" + wt
 
@@ -314,6 +313,7 @@ if __name__ == "__main__":
 
     amino_acid_list = 'ACDEFGHIKLMNPQRSTVWY'
     model_name = args.model_location[0].split("/")[-1].split(".pt")[0]
+    output_dir = args.output_dir
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -342,7 +342,9 @@ if __name__ == "__main__":
         models.append((model, batch_converter, alphabet, model_location))
 
     all_gene_dfs = []
-    for i in tqdm(genes):
+    for idx, i in tqdm(enumerate(genes)):
+        if idx > 3:
+            break
         if args.fasta:
             df = get_gene_with_fasta(i, args.fasta, models)
         else:
