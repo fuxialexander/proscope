@@ -1,5 +1,6 @@
 import gzip
 import os
+import json
 
 import numpy as np
 import pandas as pd
@@ -95,7 +96,7 @@ class Protein(object):
 
     def __init__(self, gene_name, homodimer=False, use_es=False, 
                  esm_folder = "/manitou/pmg/users/xf2217/demo_data/esm1b/esm1b_t33_650M_UR90S_1",
-                af2_folder = "/manitou/pmg/users/xf2217/demo_data/af2",
+                 af2_folder = "/manitou/pmg/users/xf2217/demo_data/af2",
                  window_size=10):
         """
         Args:
@@ -683,3 +684,122 @@ class Protein(object):
         if filename is not None:
             plt.savefig(filename, dpi=300, bbox_inches="tight")
         return fig, ax
+
+### Alejandro adds
+
+def write_gene_list(feather_file, gene_list_file):
+    gene_list = pd.read_feather(feather_file)["uniprot_id"].tolist()
+    gene_list = list(set(gene_list))
+    
+    with open(gene_list_file, "w") as f:
+        json.dump(gene_list, f)
+
+
+def get_pairwise_distance(
+    uniprot_id,
+    dimer=False,
+    af2_folder="/pmglocal/alb2281/es_paper/pairwise_dist",
+    error_file=None,
+):
+    if dimer:
+        structure = bioparser.get_structure(
+            "homodimer", f"{af2_folder}/dimer_structures/" + uniprot_id + ".pdb"
+        )
+        model = structure[0]
+        chain = model["A"]
+        residues = [r for r in model.get_residues()]
+        whole_len = len(residues)
+        chain_len = len(chain)
+        distance = np.zeros((whole_len, whole_len))
+        for i, residue1 in enumerate(residues):
+            for j, residue2 in enumerate(residues):
+                # compute distance between CA atoms
+                try:
+                    d = residue1["CA"] - residue2["CA"]
+                    distance[i][j] = d
+                    distance[j][i] = d
+                except KeyError:
+                    continue
+        distance = np.fmin(
+            distance[0:chain_len, 0:chain_len],
+            distance[0:chain_len, chain_len:whole_len],
+        )
+    else:
+        if exists(f"{af2_folder}/pairwise_interaction/" + uniprot_id + ".npy"):
+            distance = np.load(
+                f"{af2_folder}/pairwise_interaction/" + uniprot_id + ".npy"
+            )
+        else:
+            # make sure structures folder exists
+            if not exists(f"{af2_folder}/structures/"):
+                os.makedirs(f"{af2_folder}/structures/")
+
+            # download pdb file from AFDB to structures/
+            import urllib.request
+
+            url = (
+                "https://alphafold.ebi.ac.uk/files/AF-"
+                + uniprot_id
+                + "-F1-model_v4.pdb"
+            )
+            try:
+                urllib.request.urlretrieve(
+                    url,
+                    f"{af2_folder}/structures/AF-"
+                    + uniprot_id
+                    + "-F1-model_v4.pdb",
+                )
+            except Exception as e:
+                err_f.write(f"{uniprot_id},{e}\n")
+                return
+
+            # https://alphafold.ebi.ac.uk/files/AF-Q02548-F1-model_v4.pdb
+            with open(
+                f"{af2_folder}/structures/AF-"
+                + uniprot_id
+                + "-F1-model_v4.pdb",
+                "r",
+            ) as f:
+                structure = bioparser.get_structure("monomer", f)
+
+            model = structure[0]
+            chain = model["A"]
+            residues = [r for r in model.get_residues()]
+            whole_len = len(residues)
+            chain_len = len(chain)
+            distance = np.zeros((whole_len, whole_len))
+            for i, residue1 in enumerate(residues):
+                for j, residue2 in enumerate(residues):
+                    # compute distance between CA atoms
+                    try:
+                        d = residue1["CA"] - residue2["CA"]
+                        distance[i][j] = d
+                        distance[j][i] = d
+                    except KeyError:
+                        continue
+        # make sure pairwise_interaction folder exists
+        if not exists(f"{af2_folder}/pairwise_interaction/"):
+            os.makedirs(f"{af2_folder}/pairwise_interaction/")
+
+        np.save(
+            f"{af2_folder}/pairwise_interaction/" + uniprot_id + ".npy",
+            distance,
+        )
+        return
+
+
+if __name__=="__main__":
+    gene_list_file = "/manitou/pmg/users/alb2281/data/pairwise_dist/genes.json"
+    error_file = "/pmglocal/alb2281/es_paper/pairwise_dist/error.csv"
+
+    # write_gene_list(feather_file, gene_list_file)
+
+    with open(gene_list_file, "r") as f: 
+        gene_list = json.load(f)
+
+    gene_list = [item for item in gene_list if item is not None]
+    gene_list = sorted(gene_list)
+    err_f = open(error_file, "w")
+    for uniprot_id in tqdm(gene_list):
+        get_pairwise_distance(uniprot_id, error_file=err_f)
+    err_f.close()
