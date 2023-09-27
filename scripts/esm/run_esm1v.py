@@ -35,7 +35,12 @@ def create_parser():
         "--gene",
         type=str,
         help="Gene to predict")
-    parser.add_argument("--out_dir", type=str, help="Output directory", default=".")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Output directory",
+        default="."
+    )
     parser.add_argument(
         "--model_location",
         type=str,
@@ -91,6 +96,12 @@ def create_parser():
         type=int,
         default=400,
         help="number of sequences to randomly sample from the MSA"
+    )
+    parser.add_argument(
+        "--uniprot_path",
+        type=str,
+        default=None,
+        help="Path to UniProt sequence definitions"
     )
     # fmt: on
     parser.add_argument("--nogpu", action="store_true", help="Do not use GPU even if available")
@@ -258,14 +269,12 @@ def get_gene(gene, models):
                 continue
             dfs.append(get_output(df, seq, offset, models, args))
         dfs = pd.concat(dfs).reset_index(drop=True)
-        # dfs.to_feather(f"{args.out_dir}/{gene}.feather")
         return dfs
     else:
         seq = str(pep_dict[gene].seq)
         offset=1
         df = get_saturated_mutations(seq, gene, offset)
         dfs = get_output(df, seq, offset, models, args).reset_index(drop=True)
-        # dfs.to_feather(f"{args.out_dir}/{gene}.feather")
         return dfs
 
 
@@ -281,14 +290,12 @@ def get_gene_with_fasta(gene, fasta, models):
             df = get_saturated_mutations(seq, gene, offset)
             dfs.append(get_output(df, seq, offset, models, args))
         dfs = pd.concat(dfs).reset_index(drop=True)
-        # dfs.to_feather(f"{args.out_dir}/{gene}.feather")
         return dfs
     else:
         seq = str(seqf.seq)
         offset=1
         df = get_saturated_mutations(seq, gene, offset)
         dfs = get_output(df, seq, offset, models, args).reset_index(drop=True)
-        # dfs.to_feather(f"{args.out_dir}/{gene}.feather")
         return dfs
 
 
@@ -305,7 +312,6 @@ if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
 
-    uniprot_path = "/pmglocal/alb2281/es_paper/data/UP000005640_9606.fasta.gz"
     amino_acid_list = 'ACDEFGHIKLMNPQRSTVWY'
     model_name = args.model_location[0].split("/")[-1].split(".pt")[0]
 
@@ -318,7 +324,7 @@ if __name__ == "__main__":
         with open(args.genes_file, "r") as f:
             data = f.read()
         genes = data.strip("\n").split("\n")
-    with gzip.open(uniprot_path, 'rt') as pep_handle:
+    with gzip.open(args.uniprot_path, 'rt') as pep_handle:
         pep_dict = SeqIO.to_dict(
             SeqIO.parse(pep_handle, format='fasta'),
             key_function=get_uniprot_accession
